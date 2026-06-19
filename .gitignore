@@ -1,0 +1,56 @@
+# 原始数据
+*.csv
+*.xlsx
+*.xls
+
+# 文档（除 README 外）
+*.md
+!README.md
+*.pdf
+*.doc
+*.docx
+
+# 生成的图片和报告
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+*.svg
+
+# 压缩包
+*.rar
+*.zip
+*.7z
+*.tar
+*.gz
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 结果输出目录（解除目录级忽略，用文件类型控制）
+# 但结果目录中的产物应追踪（供协作者直接查看）
+!q1_results/*.png
+!q1_results/*.csv
+!q1_results/*.md
+!q1_glrt_results/*.png
+!q1_glrt_results/*.csv
+!q1_glrt_results/*.md
+!q2_harmonic_recovery/*.md
+!q2_harmonic_recovery_results/*.png
+!q2_harmonic_recovery_results/*.csv
+!q2_harmonic_recovery_results/*.md
+
+# 变更日志（追踪）
+!**/.log/change/*.md
+
+# 本地 IDE 与工作流配置
+.claude/
+AGENTS.md
+
+# 系统文件
+Thumbs.db
+.DS_Store
