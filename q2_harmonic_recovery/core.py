@@ -8,6 +8,7 @@ runnable with the bundled NumPy/OpenPyXL runtime.
 from __future__ import annotations
 
 import math
+import warnings
 from statistics import NormalDist
 from pathlib import Path
 
@@ -20,7 +21,18 @@ def load_single_source(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
     ws = wb["单源故障"]
     rows = [(r[0], r[1]) for r in ws.iter_rows(min_row=2, values_only=True)]
     wb.close()
-    arr = np.asarray(rows, dtype=float)
+    try:
+        arr = np.asarray(rows, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path} sheet '单源故障' must contain only numeric time and signal values.") from exc
+    finite = np.isfinite(arr)
+    if arr.ndim != 2 or arr.shape[1] != 2 or not bool(np.all(finite)):
+        bad = np.argwhere(~finite)
+        if len(bad):
+            row, col = bad[0]
+            cell = f"{'AB'[col]}{row + 2}"
+            raise ValueError(f"{path} sheet '单源故障' contains non-finite data at {cell}.")
+        raise ValueError(f"{path} sheet '单源故障' must contain exactly two numeric columns.")
     t, x = arr[:, 0], arr[:, 1]
     fs = float(1.0 / np.median(np.diff(t)))
     return t, x, fs
@@ -35,6 +47,11 @@ def linear_detrend(t: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, np.ndarray
 
 def wrap_phase(value: np.ndarray | float) -> np.ndarray | float:
     return np.angle(np.exp(1j * value))
+
+
+def align_phase_to_reference(value: np.ndarray | float, reference: float) -> np.ndarray | float:
+    """Move wrapped phase values onto the continuous branch around reference."""
+    return reference + wrap_phase(np.asarray(value) - reference)
 
 
 def harmonic_fit(t: np.ndarray, y: np.ndarray, frequency: float) -> dict:
@@ -200,20 +217,16 @@ def bootstrap_parameters(t: np.ndarray, fit: dict, runs: int, seed: int) -> tupl
     phase_center = np.arctan2(b, a)
     phase_origin = wrap_phase(phase_center - 2.0 * np.pi * frequency * fit["center_time_s"])
     point_phase = fit["phase_origin_rad"]
-    phase_delta = wrap_phase(phase_origin - point_phase)
+    phase_origin_continuous = align_phase_to_reference(phase_origin, point_phase)
     quantities = {
         "frequency_hz": (frequency, fit["frequency_hz"]),
         "amplitude": (amplitude, fit["amplitude"]),
-        "phase_origin_rad": (phase_delta, 0.0),
+        "phase_origin_rad": (phase_origin_continuous, point_phase),
         "offset": (offset, fit["offset"]),
     }
     rows = []
     for name, (values, point) in quantities.items():
         low, high = np.quantile(values, [0.025, 0.975])
-        if name == "phase_origin_rad":
-            low += point_phase
-            high += point_phase
-            point = point_phase
         rows.append({
             "parameter": name,
             "estimate": float(point),
@@ -230,10 +243,21 @@ def bootstrap_parameters(t: np.ndarray, fit: dict, runs: int, seed: int) -> tupl
 def joint_segment_fit(t: np.ndarray, y: np.ndarray, initial_f: float, fs: float, segment_seconds: float = 50.0):
     segment_len = int(round(segment_seconds * fs))
     segments = []
+    dropped_samples = 0
     for start in range(0, len(y), segment_len):
         end = min(start + segment_len, len(y))
         if end - start >= int(10 * fs):
             segments.append((t[start:end], y[start:end]))
+        else:
+            dropped_samples += end - start
+    if dropped_samples >= int(fs):
+        warnings.warn(
+            f"Skipped {dropped_samples} sample(s) in short trailing segment(s) in joint_segment_fit.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if not segments:
+        raise ValueError("No segments are at least 10 seconds long; cannot run joint segment fit.")
 
     def total_sse(frequency: float) -> float:
         return float(sum(harmonic_fit(st, sy, frequency)["sse"] for st, sy in segments))
@@ -259,14 +283,14 @@ def joint_segment_fit(t: np.ndarray, y: np.ndarray, initial_f: float, fs: float,
             "independent_deviation_from_common_hz": independent["frequency_hz"] - common_f,
             "amplitude": common["amplitude"],
             "phase_origin_rad": common["phase_origin_rad"],
-            "estimated_snr_db": 10.0 * math.log10(signal_power / noise_power),
+            "estimated_snr_db": 10.0 * math.log10(signal_power / max(noise_power, 1e-300)),
             "residual_rmse": common["rmse"],
         })
     n = sum(len(sy) for _, sy in segments)
     k_common = 1 + 3 * len(segments)
     k_independent = 4 * len(segments)
-    bic_common = n * math.log(common_sse / n) + k_common * math.log(n)
-    bic_independent = n * math.log(independent_sse / n) + k_independent * math.log(n)
+    bic_common = n * math.log(max(common_sse / n, 1e-300)) + k_common * math.log(n)
+    bic_independent = n * math.log(max(independent_sse / n, 1e-300)) + k_independent * math.log(n)
     comparison = [
         {"model": "common frequency", "parameters": k_common, "sse": common_sse, "bic": bic_common},
         {"model": "independent frequencies", "parameters": k_independent, "sse": independent_sse, "bic": bic_independent},
@@ -378,6 +402,8 @@ def fft_zero_phase_lowpass(x: np.ndarray, fs: float, pass_hz: float = 8.0, stop_
 def _ssa_reconstruct_pair(x: np.ndarray, fs: float, window: int, target_hz: float) -> tuple[np.ndarray, tuple[int, int], float]:
     """Reconstruct the two SSA components most concentrated around target_hz."""
     centered = np.asarray(x, dtype=float) - float(np.mean(x))
+    if window > len(centered):
+        raise ValueError(f"SSA window ({window}) cannot exceed signal length ({len(centered)}).")
     trajectory = np.lib.stride_tricks.sliding_window_view(centered, window).T
     columns = trajectory.shape[1]
     covariance = trajectory @ trajectory.T / columns
@@ -432,6 +458,13 @@ def ssa_recovery_comparison(
     recovered_by_window: dict[int, np.ndarray] = {}
     for original_window in window_points:
         window_ds = max(20, int(round(original_window / downsample_factor)))
+        if window_ds > len(y_ds):
+            warnings.warn(
+                f"Skipped SSA window {original_window} original points because {window_ds} downsampled points exceed signal length {len(y_ds)}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
         recovered_ds, selected, variance_share = _ssa_reconstruct_pair(
             y_ds, fs_ds, window_ds, fit["frequency_hz"]
         )
@@ -459,6 +492,8 @@ def ssa_recovery_comparison(
             "residual_std": residual_std,
             "target_band_power_fraction": float(np.sum(power[target]) / max(np.sum(power[useful]), 1e-30)),
         })
+    if not rows:
+        raise ValueError("No valid SSA windows remain after downsampling; cannot run SSA comparison.")
     best_window = max(rows, key=lambda row: row["correlation_to_harmonic"])["window_points_original"]
     return rows, recovered_by_window[int(best_window)], int(best_window)
 
@@ -500,9 +535,15 @@ def fast_frequency_estimate(t: np.ndarray, x: np.ndarray, fs: float, expected: f
     return harmonic_fit(t, y, frequency)
 
 
-def simulation_validation(fs: float, n: int, amplitude: float, seed: int, runs_per_snr: int = 200) -> list[dict]:
+def simulation_validation(
+    fs: float,
+    n: int,
+    amplitude: float,
+    seed: int,
+    runs_per_snr: int = 200,
+    f_true: float = 2.0,
+) -> list[dict]:
     rng = np.random.default_rng(seed + 100)
-    f_true = 2.0
     t = np.arange(n, dtype=float) / fs
     rows = []
     normal = NormalDist()
@@ -519,7 +560,8 @@ def simulation_validation(fs: float, n: int, amplitude: float, seed: int, runs_p
             recovered = est["amplitude"] * np.sin(2.0 * np.pi * est["frequency_hz"] * t + est["phase_origin_rad"])
             freq_errors.append(abs(est["frequency_hz"] - f_true))
             amp_rel_errors.append(abs(est["amplitude"] - amplitude) / amplitude)
-            phase_errors.append(abs(float(wrap_phase(est["phase_origin_rad"] - phi_true))))
+            aligned_phase = float(align_phase_to_reference(est["phase_origin_rad"], phi_true))
+            phase_errors.append(abs(aligned_phase - phi_true))
             waveform_rmse.append(float(np.sqrt(np.mean((recovered - truth) ** 2))))
 
             theta, cov = parameter_covariance(t, est)
@@ -534,7 +576,7 @@ def simulation_validation(fs: float, n: int, amplitude: float, seed: int, runs_p
             se_phi = math.sqrt(max(float(grad_po @ cov @ grad_po), 0.0))
             cover_f.append(abs(est["frequency_hz"] - f_true) <= 1.96 * se_f)
             cover_a.append(abs(est["amplitude"] - amplitude) <= 1.96 * se_A)
-            cover_phi.append(abs(float(wrap_phase(est["phase_origin_rad"] - phi_true))) <= 1.96 * se_phi)
+            cover_phi.append(abs(aligned_phase - phi_true) <= 1.96 * se_phi)
         rows.append({
             "snr_db": snr_db,
             "runs": runs_per_snr,

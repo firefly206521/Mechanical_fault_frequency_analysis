@@ -94,7 +94,14 @@ def main():
     ssa_rows, ssa_best, ssa_best_window = ssa_recovery_comparison(t, y, fit, fs)
     # Use the same 40,001 samples as the real record so simulation accuracy is
     # directly comparable with the full-data recovery task.
-    simulation_rows = simulation_validation(fs, len(t), fit["amplitude"], SEED, args.simulation_runs)
+    simulation_rows = simulation_validation(
+        fs,
+        len(t),
+        fit["amplitude"],
+        SEED,
+        args.simulation_runs,
+        f_true=fit["frequency_hz"],
+    )
 
     global_rows = [{
         "data_path": str(data_path),
