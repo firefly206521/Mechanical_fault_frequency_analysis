@@ -38,10 +38,12 @@ def _scenarios() -> list[dict]:
         ("equal_0025_failed_seed_32", "equal", 0.0025, AMPLITUDE_CASES["equal"], _source_phases(equal_id, 32)),
         ("equal_0025_failed_seed_130", "equal", 0.0025, AMPLITUDE_CASES["equal"], _source_phases(equal_id, 130)),
         ("equal_0025_control_seed_0", "equal", 0.0025, AMPLITUDE_CASES["equal"], _source_phases(equal_id, 0)),
+        ("equal_0025_phase_grid_worst", "equal", 0.0025, AMPLITUDE_CASES["equal"], np.asarray([0.0, -np.pi])),
         ("unequal_003_failed_seed_6", "unequal", 0.003, AMPLITUDE_CASES["unequal"], _source_phases(unequal_id, 6)),
         ("unequal_003_failed_seed_17", "unequal", 0.003, AMPLITUDE_CASES["unequal"], _source_phases(unequal_id, 17)),
         ("unequal_003_failed_seed_26", "unequal", 0.003, AMPLITUDE_CASES["unequal"], _source_phases(unequal_id, 26)),
         ("unequal_003_control_seed_0", "unequal", 0.003, AMPLITUDE_CASES["unequal"], _source_phases(unequal_id, 0)),
+        ("unequal_003_phase_grid_worst", "unequal", 0.003, AMPLITUDE_CASES["unequal"], np.asarray([0.0, 5.0 * np.pi / 6.0])),
     ]
     return [
         {

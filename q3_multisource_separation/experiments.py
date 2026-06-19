@@ -125,6 +125,7 @@ def run_resolution_trial(
     amplitude_case: str,
     replicate: int,
     music_grid_step: float,
+    conditional_threshold: float | None = None,
 ) -> dict:
     amplitudes = AMPLITUDE_CASES[amplitude_case]
     frequencies = np.asarray([13.5 - separation / 2.0, 13.5 + separation / 2.0])
@@ -136,7 +137,12 @@ def run_resolution_trial(
     observed = signal + rng.normal(0.0, noise_std, len(t))
 
     started = time.perf_counter()
-    main = close_pair_resolver(t, observed, local_grid_step_hz=music_grid_step)
+    main = close_pair_resolver(
+        t,
+        observed,
+        local_grid_step_hz=music_grid_step,
+        conditional_threshold=conditional_threshold,
+    )
     main_seconds = time.perf_counter() - started
     started = time.perf_counter()
     music = music_close_pair(t, observed, grid_step_hz=music_grid_step)
@@ -164,6 +170,11 @@ def run_resolution_trial(
         "main_bic_improvement": main["bic_improvement"],
         "main_candidate_origin": main.get("candidate_origin", ""),
         "main_residual_peak_ratio": main.get("residual_peak_ratio", float("nan")),
+        "main_conditional_glrt_statistic": main.get("conditional_glrt_statistic", float("nan")),
+        "main_conditional_glrt_threshold": main.get("conditional_glrt_threshold", float("nan")),
+        "main_frequency_ci_reliable": main.get("frequency_ci_reliable", False),
+        "main_frequency_1_se_hz": main.get("frequency_1_se_hz", float("nan")),
+        "main_frequency_2_se_hz": main.get("frequency_2_se_hz", float("nan")),
         "main_local_grid_step_hz": main.get("local_grid_step_hz", music_grid_step),
         "condition_design": main["condition_design"],
         "condition_normal": main["condition_normal"],
@@ -297,7 +308,7 @@ def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: floa
 
     started = time.perf_counter()
     if case_name in {"non_symmetric_close", "identical_frequency", "phase_cancellation"}:
-        estimate = close_pair_resolver(t, observed)
+        estimate = close_pair_resolver(t, observed, conditional_threshold=cfg.conditional_threshold)
     else:
         estimate = fast_spaced_detection(t, observed, fs, cfg)
     elapsed = time.perf_counter() - started

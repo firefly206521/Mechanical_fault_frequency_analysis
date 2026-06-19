@@ -18,6 +18,7 @@ from q2_harmonic_recovery.outputs import write_csv
 from . import SEED
 from .core import (
     component_table,
+    conditional_glrt_threshold,
     detect_multitone,
     GLRTConfig,
     load_multi_source,
@@ -72,9 +73,17 @@ def _null_worker(replicate: int) -> dict:
 
 
 def _resolution_worker(task: tuple[str, float, int]) -> dict:
-    assert _WORKER_T is not None and _WORKER_NOISE_STD is not None and _WORKER_MUSIC_STEP is not None, "worker state is not initialized"
+    assert _WORKER_T is not None and _WORKER_NOISE_STD is not None and _WORKER_MUSIC_STEP is not None and _WORKER_CFG is not None, "worker state is not initialized"
     case, separation, replicate = task
-    return run_resolution_trial(_WORKER_T, _WORKER_NOISE_STD, separation, case, replicate, _WORKER_MUSIC_STEP)
+    return run_resolution_trial(
+        _WORKER_T,
+        _WORKER_NOISE_STD,
+        separation,
+        case,
+        replicate,
+        _WORKER_MUSIC_STEP,
+        _WORKER_CFG.conditional_threshold,
+    )
 
 
 def _extreme_worker(task: tuple[str, int]) -> dict:
@@ -179,6 +188,18 @@ def main() -> None:
         random_seed=SEED,
     )
     cfg = replace(cfg, threshold=q1_compatible_glrt_threshold(len(y), fs, cfg))
+    baseband_factor = max(1, int(round(fs / 1.0)))
+    baseband_n = len(t[::baseband_factor])
+    baseband_fs = fs / baseband_factor
+    cfg = replace(
+        cfg,
+        conditional_threshold=conditional_glrt_threshold(
+            baseband_n,
+            baseband_fs,
+            args.music_local_grid_step,
+            monte_carlo_runs=max(args.glrt_mc, 100),
+        ),
+    )
 
     actual_started = time.perf_counter()
     fit, history = detect_multitone(t, y, fs, cfg, max_components=args.max_components)

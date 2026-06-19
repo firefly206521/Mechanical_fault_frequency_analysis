@@ -16,6 +16,12 @@ Q1主模块导入时依赖Matplotlib，而当前Q2轻量运行环境没有该库
 python -m q3_multisource_separation.run_q3 --simulation-runs 200 --resolution-runs 200 --null-runs 500 --extreme-runs 100 --workers 8
 ```
 
+优化后的近频路径会在完整400秒记录上同时精修单频零假设与双频备择模型，使用中心频率/正间隔二维可变投影、1% Monte Carlo条件GLRT、ΔBIC、秩与条件数检查，并输出有限差分Hessian频率区间。为保留基线结果，正式复验使用独立输出目录：
+
+```powershell
+python -m q3_multisource_separation.run_q3 --simulation-runs 200 --resolution-runs 200 --null-runs 500 --extreme-runs 100 --workers 8 --output-dir q3_multisource_separation_results_optimized
+```
+
 也可以进入本目录执行：
 
 ```powershell

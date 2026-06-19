@@ -36,6 +36,7 @@ class GLRTConfig:
     glrt_mc: int = 500
     random_seed: int = SEED
     threshold: float | None = None
+    conditional_threshold: float | None = None
 
 
 def q1_compatible_glrt_stat(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
@@ -298,7 +299,7 @@ def detect_multitone(
             nearest = float(current["frequencies_hz"][nearest_index])
             if abs(nearest - scan["peak_frequency_hz"]) < 0.02:
                 local_center = 0.5 * (nearest + scan["peak_frequency_hz"])
-                local = close_pair_resolver(t, y, center_hz=local_center)
+                local = close_pair_resolver(t, y, center_hz=local_center, conditional_threshold=cfg.conditional_threshold)
                 if local["estimated_k"] == 2:
                     local_seed = np.sort(np.r_[np.delete(current["frequencies_hz"], nearest_index), local["frequencies_hz"]])
                     seed_sets.append(("local_close_pair_resolver", local_seed))
@@ -473,11 +474,132 @@ def _refine_complex_pair(t: np.ndarray, z: np.ndarray, seed: np.ndarray, rounds:
     return _complex_fit(t, z, values)
 
 
+def _refine_single_full(t: np.ndarray, x: np.ndarray, seed_hz: float, width_hz: float = 0.00025) -> dict:
+    """Refine the one-tone null on the full real-valued record."""
+    frequency = golden_minimize(
+        lambda value: _multi_sse(t, x, [value]),
+        max(0.001, seed_hz - width_hz),
+        seed_hz + width_hz,
+        iterations=18,
+    )
+    return multi_harmonic_fit(t, x, [frequency])
+
+
+def _pattern_refine_pair_full(
+    t: np.ndarray,
+    x: np.ndarray,
+    seed_hz: np.ndarray,
+    initial_step_hz: float = 0.0002,
+    max_iterations: int = 8,
+) -> dict:
+    """Two-dimensional variable-projection search in center/separation space."""
+    seed = np.sort(np.asarray(seed_hz, float))
+    center = float(np.mean(seed))
+    separation = float(seed[1] - seed[0])
+    center_step = initial_step_hz
+    separation_step = 2.0 * initial_step_hz
+    cache: dict[tuple[float, float], float] = {}
+
+    def objective(candidate_center: float, candidate_separation: float) -> float:
+        if not 1e-7 <= candidate_separation <= 0.024:
+            return float("inf")
+        frequencies = (candidate_center - candidate_separation / 2.0, candidate_center + candidate_separation / 2.0)
+        if frequencies[0] <= 0.001:
+            return float("inf")
+        key = (round(candidate_center, 12), round(candidate_separation, 12))
+        if key not in cache:
+            cache[key] = _multi_sse(t, x, frequencies)
+        return cache[key]
+
+    best = objective(center, separation)
+    for _ in range(max_iterations):
+        candidates = []
+        for dc, ds in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            trial_center = center + dc * center_step
+            trial_separation = separation + ds * separation_step
+            candidates.append((objective(trial_center, trial_separation), trial_center, trial_separation))
+        trial_sse, trial_center, trial_separation = min(candidates, key=lambda row: row[0])
+        if trial_sse + 1e-12 < best:
+            best, center, separation = trial_sse, trial_center, trial_separation
+        center_step *= 0.5
+        separation_step *= 0.5
+        if max(center_step, separation_step) < 1e-8:
+            break
+    frequencies = np.asarray([center - separation / 2.0, center + separation / 2.0])
+    fit = multi_harmonic_fit(t, x, frequencies)
+    fit["optimizer_message"] = "multi-start full-record center/separation pattern search"
+    return fit
+
+
+def _frequency_uncertainty(t: np.ndarray, x: np.ndarray, fit: dict) -> dict:
+    """Finite-difference Hessian uncertainty for a fitted frequency pair."""
+    frequencies = np.asarray(fit["frequencies_hz"], float)
+    if len(frequencies) != 2:
+        return {"frequency_ci_reliable": False}
+    duration = float(t[-1] - t[0])
+    h = max(1e-7, 1.0 / (200.0 * duration))
+    base = _multi_sse(t, x, frequencies)
+    hessian = np.empty((2, 2), float)
+    for index in range(2):
+        plus = frequencies.copy(); plus[index] += h
+        minus = frequencies.copy(); minus[index] -= h
+        hessian[index, index] = (_multi_sse(t, x, plus) - 2.0 * base + _multi_sse(t, x, minus)) / h ** 2
+    pp = _multi_sse(t, x, frequencies + np.asarray([h, h]))
+    pm = _multi_sse(t, x, frequencies + np.asarray([h, -h]))
+    mp = _multi_sse(t, x, frequencies + np.asarray([-h, h]))
+    mm = _multi_sse(t, x, frequencies - np.asarray([h, h]))
+    hessian[0, 1] = hessian[1, 0] = (pp - pm - mp + mm) / (4.0 * h ** 2)
+    residual_variance = fit["sse"] / max(len(t) - fit["parameter_count"], 1)
+    reliable = bool(np.all(np.isfinite(hessian)) and np.min(np.linalg.eigvalsh(hessian)) > 0.0)
+    if not reliable:
+        return {"frequency_ci_reliable": False}
+    covariance = 2.0 * residual_variance * np.linalg.inv(hessian)
+    standard_errors = np.sqrt(np.maximum(np.diag(covariance), 0.0))
+    if not np.all(np.isfinite(standard_errors)) or np.max(standard_errors) > 0.012:
+        return {"frequency_ci_reliable": False}
+    return {
+        "frequency_ci_reliable": True,
+        "frequency_1_se_hz": float(standard_errors[0]),
+        "frequency_2_se_hz": float(standard_errors[1]),
+        "frequency_1_ci95_low_hz": float(frequencies[0] - 1.96 * standard_errors[0]),
+        "frequency_1_ci95_high_hz": float(frequencies[0] + 1.96 * standard_errors[0]),
+        "frequency_2_ci95_low_hz": float(frequencies[1] - 1.96 * standard_errors[1]),
+        "frequency_2_ci95_high_hz": float(frequencies[1] + 1.96 * standard_errors[1]),
+    }
+
+
+@lru_cache(maxsize=16)
+def conditional_glrt_threshold(
+    n: int,
+    fs: float,
+    local_grid_step_hz: float,
+    monte_carlo_runs: int = 500,
+    alpha: float = 0.01,
+    random_seed: int = SEED + 31,
+) -> float:
+    """Monte Carlo threshold for a searched second tone under a one-tone null."""
+    rng = np.random.default_rng(random_seed)
+    time_axis = np.arange(n, dtype=float) / fs
+    statistics = np.empty(monte_carlo_runs, float)
+    for replicate in range(monte_carlo_runs):
+        noise = (rng.normal(size=n) + 1j * rng.normal(size=n)) / math.sqrt(2.0)
+        one = _complex_fit(time_axis, noise, [0.0])
+        grid, power = _baseband_periodogram(one["residual"], fs, local_grid_step_hz)
+        allowed = np.abs(grid) >= max(4.0 * local_grid_step_hz, 0.00015)
+        candidate = float(grid[int(np.argmax(np.where(allowed, power, -np.inf)))])
+        two = _complex_fit(time_axis, noise, [0.0, candidate])
+        numerator = max(one["sse"] - two["sse"], 0.0) / 3.0
+        denominator = two["sse"] / max(2 * n - 8, 1)
+        statistics[replicate] = numerator / max(denominator, np.finfo(float).eps)
+    return float(np.quantile(statistics, 1.0 - alpha))
+
+
 def close_pair_resolver(
     t: np.ndarray,
     x: np.ndarray,
     center_hz: float = 13.5,
     local_grid_step_hz: float = 0.000025,
+    conditional_threshold: float | None = None,
 ) -> dict:
     """Resolve a local two-tone cluster using peel, rescan, and joint refit.
 
@@ -541,11 +663,37 @@ def close_pair_resolver(
         trial = _refine_complex_pair(tb, z, seed)
         refined.append((trial["bic"], origin, trial))
     _, candidate_origin, two = min(refined, key=lambda item: item[0])
-    frequencies = center_hz + two["offsets"]
-    one_full = multi_harmonic_fit(t, x, [center_hz + one["offsets"][0]])
-    full_fit = multi_harmonic_fit(t, x, frequencies)
+
+    one_full_candidates = [
+        _refine_single_full(t, x, center_hz + one["offsets"][0]),
+        _refine_single_full(t, x, center_hz),
+    ]
+    one_full = min(one_full_candidates, key=lambda fit: fit["sse"])
+    full_candidates = []
+    for _, origin, trial in refined[:1]:
+        seed_hz = center_hz + trial["offsets"]
+        optimized = _pattern_refine_pair_full(
+            t,
+            x,
+            seed_hz,
+            initial_step_hz=max(20.0 * local_grid_step_hz, 0.0005),
+        )
+        full_candidates.append((optimized["bic"], origin, optimized))
+    _, candidate_origin, full_fit = min(full_candidates, key=lambda item: item[0])
+    frequencies = full_fit["frequencies_hz"]
     improvement = one_full["bic"] - full_fit["bic"]
-    accepted = bool(improvement >= 10.0 and residual_peak_ratio >= 10.0 and not full_fit["ill_conditioned"])
+    conditional_statistic = (
+        max(one_full["sse"] - full_fit["sse"], 0.0) / 3.0
+    ) / max(full_fit["sse"] / max(len(t) - full_fit["parameter_count"], 1), np.finfo(float).eps)
+    if conditional_threshold is None:
+        conditional_threshold = conditional_glrt_threshold(len(tb), fsb, local_grid_step_hz)
+    accepted = bool(
+        improvement >= 10.0
+        and conditional_statistic >= conditional_threshold
+        and full_fit["numerical_rank"] == full_fit["column_count"]
+        and not full_fit["ill_conditioned"]
+    )
+    uncertainty = _frequency_uncertainty(t, x, full_fit) if accepted else {"frequency_ci_reliable": False}
     return {
         "estimated_k": 2 if accepted else 1,
         "frequencies_hz": frequencies if accepted else np.asarray([center_hz + one["offsets"][0]]),
@@ -561,7 +709,10 @@ def close_pair_resolver(
         "baseband_fs_hz": fsb,
         "candidate_origin": candidate_origin,
         "residual_peak_ratio": residual_peak_ratio,
+        "conditional_glrt_statistic": conditional_statistic,
+        "conditional_glrt_threshold": conditional_threshold,
         "local_grid_step_hz": local_grid_step_hz,
+        **uncertainty,
     }
 
 
