@@ -13,7 +13,6 @@ from .core import (
     close_pair_resolver,
     detect_multitone,
     glrt_scan,
-    multi_harmonic_fit,
     music_close_pair,
 )
 

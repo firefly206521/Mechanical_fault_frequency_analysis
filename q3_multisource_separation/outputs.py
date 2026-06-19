@@ -32,7 +32,9 @@ def append_csv_rows(path: Path, rows: list[dict]) -> None:
             existing_header = next(csv.reader(handle), None)
         if not existing_header:
             raise ValueError(f"Existing CSV has no header: {path}")
-        if set(existing_header) != set(fieldnames):
+        if existing_header != fieldnames:
+            if set(existing_header) == set(fieldnames):
+                raise ValueError(f"CSV schema order mismatch for {path.name}; existing={existing_header}, new={fieldnames}")
             missing = sorted(set(existing_header) - set(fieldnames))
             extra = sorted(set(fieldnames) - set(existing_header))
             raise ValueError(f"CSV schema mismatch for {path.name}; missing={missing}, extra={extra}")
