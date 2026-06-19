@@ -15,6 +15,7 @@ from typing import Iterable
 import numpy as np
 import openpyxl
 
+from . import SEED
 from q2_harmonic_recovery.core import (
     analytic_signal,
     golden_minimize,
@@ -34,7 +35,7 @@ class GLRTConfig:
     f_max: float = 49.5
     p_fa: float = 0.005
     glrt_mc: int = 500
-    random_seed: int = 20260620
+    random_seed: int = SEED
 
 
 def q1_compatible_glrt_stat(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
@@ -382,9 +383,9 @@ def close_pair_resolver(t: np.ndarray, x: np.ndarray, center_hz: float = 13.5) -
 
     values = best_seed.copy()
     for _ in range(5):
-        left_hi = min(-1e-7, values[1] - 1e-7)
+        left_hi = values[1] - 1e-7
         values[0] = golden_minimize(lambda value: _complex_sse(tb, z, [value, values[1]]), -0.012, left_hi, iterations=28)
-        right_lo = max(1e-7, values[0] + 1e-7)
+        right_lo = values[0] + 1e-7
         values[1] = golden_minimize(lambda value: _complex_sse(tb, z, [values[0], value]), right_lo, 0.012, iterations=28)
     two = _complex_fit(tb, z, np.sort(values))
     frequencies = center_hz + two["offsets"]

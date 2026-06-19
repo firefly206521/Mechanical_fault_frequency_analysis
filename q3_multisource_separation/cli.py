@@ -154,9 +154,9 @@ def main() -> None:
                 batch.append(run_simulation_trial(t, fs, fit, snr, replicate, cfg))
                 if len(batch) == 20 or count == len(pending):
                     append_csv_rows(simulation_path, batch)
+                    simulation_rows.extend(batch)
                     batch.clear()
                     _progress(f"多源仿真 SNR={snr:g} dB", count, len(pending), condition_started)
-        simulation_rows = read_csv_rows(simulation_path)
     simulation_stage_seconds = time.perf_counter() - simulation_stage_started
 
     null_stage_started = time.perf_counter()
@@ -170,9 +170,9 @@ def main() -> None:
             batch.append(run_null_trial(t, fs, noise_std, replicate, cfg))
             if len(batch) == 20 or count == len(pending):
                 append_csv_rows(null_path, batch)
+                null_rows.extend(batch)
                 batch.clear()
                 _progress("纯噪声误报实验", count, len(pending), condition_started)
-        null_rows = read_csv_rows(null_path)
     null_stage_seconds = time.perf_counter() - null_stage_started
 
     resolution_stage_started = time.perf_counter()
@@ -188,9 +188,9 @@ def main() -> None:
                     batch.append(run_resolution_trial(t, noise_std, separation, case, replicate, args.music_local_grid_step))
                     if len(batch) == 20 or count == len(pending):
                         append_csv_rows(resolution_path, batch)
+                        resolution_rows.extend(batch)
                         batch.clear()
                         _progress(f"近频实验 {case}, Δf={separation:g} Hz", count, len(pending), condition_started)
-        resolution_rows = read_csv_rows(resolution_path)
     resolution_stage_seconds = time.perf_counter() - resolution_stage_started
 
     simulation_summary = summarize_simulation(simulation_rows)
@@ -223,13 +223,18 @@ def main() -> None:
     mean_main_resolution = float(np.mean([float(row["main_runtime_seconds"]) for row in resolution_rows])) if resolution_rows else float("nan")
     mean_music_resolution = float(np.mean([float(row["music_runtime_seconds"]) for row in resolution_rows])) if resolution_rows else float("nan")
     mean_null_trial = float(np.mean([float(row["runtime_seconds"]) for row in null_rows])) if null_rows else float("nan")
-    estimated_full_200 = actual_analysis_seconds + output_stage_seconds
+    estimated_full = actual_analysis_seconds + output_stage_seconds
     if np.isfinite(mean_simulation_trial):
-        estimated_full_200 += mean_simulation_trial * len(SNR_LEVELS) * 200
+        estimated_full += mean_simulation_trial * len(SNR_LEVELS) * args.simulation_runs
     if np.isfinite(mean_main_resolution) and np.isfinite(mean_music_resolution):
-        estimated_full_200 += (mean_main_resolution + mean_music_resolution) * len(AMPLITUDE_CASES) * len(SEPARATIONS) * 200
+        estimated_full += (
+            (mean_main_resolution + mean_music_resolution)
+            * len(AMPLITUDE_CASES)
+            * len(SEPARATIONS)
+            * args.resolution_runs
+        )
     if np.isfinite(mean_null_trial):
-        estimated_full_200 += mean_null_trial * 500
+        estimated_full += mean_null_trial * args.null_runs
     runtime_lines = [
         f"simulation_target_runs={args.simulation_runs}",
         f"resolution_target_runs={args.resolution_runs}",
@@ -250,7 +255,7 @@ def main() -> None:
         f"mean_main_resolution_trial_seconds={mean_main_resolution}",
         f"mean_music_resolution_trial_seconds={mean_music_resolution}",
         f"mean_null_trial_seconds={mean_null_trial}",
-        f"estimated_full_200_seconds={estimated_full_200}",
+        f"estimated_full_seconds={estimated_full}",
         f"total_seconds={total_seconds:.6f}",
         f"png_count={len(png)}",
     ]

@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from . import SEED
 from .core import (
     GLRTConfig,
     golden_minimize,
@@ -28,7 +29,7 @@ AMPLITUDE_CASES = {
 
 
 def trial_rng(experiment_id: int, replicate: int) -> np.random.Generator:
-    return np.random.default_rng(np.random.SeedSequence([20260620, experiment_id, replicate]))
+    return np.random.default_rng(np.random.SeedSequence([SEED, experiment_id, replicate]))
 
 
 def _phase_error(estimate: float, truth: float) -> float:
@@ -268,10 +269,10 @@ def summarize_resolution(rows: list[dict]) -> list[dict]:
     return output
 
 
-def empirical_limit(summary: list[dict], case: str, method: str = "main") -> float | None:
+def empirical_limit(summary: list[dict], case: str, method: str = "main", threshold: float = 0.90) -> float | None:
     rows = sorted((row for row in summary if row["amplitude_case"] == case), key=lambda row: row["separation_hz"])
     key = f"{method}_success_rate"
     for index, row in enumerate(rows):
-        if row[key] >= 0.90 and all(later[key] >= 0.90 for later in rows[index:]):
+        if row[key] >= threshold and sum(later[key] < threshold for later in rows[index:]) <= 1:
             return float(row["separation_hz"])
     return None
