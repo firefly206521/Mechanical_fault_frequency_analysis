@@ -27,12 +27,15 @@ from .core import (
 )
 from .experiments import (
     AMPLITUDE_CASES,
+    EXTREME_CASES,
     SEPARATIONS,
     SNR_LEVELS,
     empirical_limit,
+    run_extreme_trial,
     run_null_trial,
     run_resolution_trial,
     run_simulation_trial,
+    summarize_extreme,
     summarize_resolution,
     summarize_simulation,
 )
@@ -69,6 +72,11 @@ def _null_worker(replicate: int) -> dict:
 def _resolution_worker(task: tuple[str, float, int]) -> dict:
     case, separation, replicate = task
     return run_resolution_trial(_WORKER_T, _WORKER_NOISE_STD, separation, case, replicate, _WORKER_MUSIC_STEP)
+
+
+def _extreme_worker(task: tuple[str, int]) -> dict:
+    case_name, replicate = task
+    return run_extreme_trial(_WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_NOISE_STD, case_name, replicate, _WORKER_CFG)
 
 
 def _run_tasks(label: str, tasks: list, worker, workers: int, started: float) -> list[dict]:
@@ -113,6 +121,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--simulation-runs", type=int, default=200)
     parser.add_argument("--resolution-runs", type=int, default=200)
     parser.add_argument("--null-runs", type=int, default=500)
+    parser.add_argument("--extreme-runs", type=int, default=100)
     parser.add_argument("--glrt-mc", type=int, default=500)
     parser.add_argument("--max-components", type=int, default=10)
     parser.add_argument("--music-local-grid-step", type=float, default=0.000025)
@@ -121,6 +130,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-simulation", action="store_true")
     parser.add_argument("--skip-resolution", action="store_true")
     parser.add_argument("--skip-null", action="store_true")
+    parser.add_argument("--skip-extreme", action="store_true")
     return parser.parse_args()
 
 
@@ -204,6 +214,7 @@ def main() -> None:
     simulation_path = output_dir / "q3_simulation_trials.csv"
     resolution_path = output_dir / "q3_resolution_trials.csv"
     null_path = output_dir / "q3_null_trials.csv"
+    extreme_path = output_dir / "q3_extreme_trials.csv"
     _WORKER_T = t
     _WORKER_FS = fs
     _WORKER_FIT = fit
@@ -211,7 +222,7 @@ def main() -> None:
     _WORKER_NOISE_STD = noise_std
     _WORKER_MUSIC_STEP = args.music_local_grid_step
     if not args.resume:
-        for path in [simulation_path, resolution_path, null_path]:
+        for path in [simulation_path, resolution_path, null_path, extreme_path]:
             if path.exists():
                 path.unlink()
 
@@ -252,10 +263,25 @@ def main() -> None:
         resolution_rows.extend(new_rows)
     resolution_stage_seconds = time.perf_counter() - resolution_stage_started
 
+    extreme_stage_started = time.perf_counter()
+    extreme_rows = read_csv_rows(extreme_path)
+    if not args.skip_extreme:
+        existing = {(row["case_name"], int(row["replicate"])) for row in extreme_rows}
+        tasks = []
+        for case_name in EXTREME_CASES:
+            pending = [rep for rep in range(args.extreme_runs) if (case_name, rep) not in existing]
+            tasks.extend((case_name, replicate) for replicate in pending)
+        new_rows = _run_tasks("极端情况实验", tasks, _extreme_worker, workers, extreme_stage_started)
+        _append_in_chunks(extreme_path, new_rows)
+        extreme_rows.extend(new_rows)
+    extreme_stage_seconds = time.perf_counter() - extreme_stage_started
+
     simulation_summary = summarize_simulation(simulation_rows)
     resolution_summary = summarize_resolution(resolution_rows)
+    extreme_summary = summarize_extreme(extreme_rows)
     write_csv(output_dir / "q3_simulation_validation.csv", simulation_summary)
     write_csv(output_dir / "q3_resolution_limit.csv", resolution_summary)
+    write_csv(output_dir / "q3_extreme_summary.csv", extreme_summary)
     write_csv(output_dir / "q3_music_comparison.csv", [{
         "amplitude_case": row["amplitude_case"],
         "separation_hz": row["separation_hz"],
@@ -272,6 +298,7 @@ def main() -> None:
         "components": components,
         "simulation_summary": simulation_summary,
         "resolution_summary": resolution_summary,
+        "extreme_summary": extreme_summary,
         "null_rows": null_rows,
     })
     output_stage_seconds = time.perf_counter() - output_stage_started
@@ -285,6 +312,7 @@ def main() -> None:
     target_simulation_rows = len(SNR_LEVELS) * args.simulation_runs
     target_resolution_rows = len(AMPLITUDE_CASES) * len(SEPARATIONS) * args.resolution_runs
     target_null_rows = args.null_runs
+    target_extreme_rows = len(EXTREME_CASES) * args.extreme_runs
     estimated_full = load_seconds + actual_analysis_seconds + output_stage_seconds
     if simulation_rows:
         estimated_full += simulation_stage_seconds * target_simulation_rows / len(simulation_rows)
@@ -292,14 +320,18 @@ def main() -> None:
         estimated_full += resolution_stage_seconds * target_resolution_rows / len(resolution_rows)
     if null_rows:
         estimated_full += null_stage_seconds * target_null_rows / len(null_rows)
+    if extreme_rows:
+        estimated_full += extreme_stage_seconds * target_extreme_rows / len(extreme_rows)
     runtime_lines = [
         f"simulation_target_runs={args.simulation_runs}",
         f"resolution_target_runs={args.resolution_runs}",
         f"null_target_runs={args.null_runs}",
+        f"extreme_target_runs={args.extreme_runs}",
         f"workers={workers}",
         f"simulation_completed_rows={len(simulation_rows)}",
         f"resolution_completed_rows={len(resolution_rows)}",
         f"null_completed_rows={len(null_rows)}",
+        f"extreme_completed_rows={len(extreme_rows)}",
         f"empirical_false_alarm_rate={false_alarm}",
         f"equal_amplitude_empirical_limit_hz={empirical_limit(resolution_summary, 'equal')}",
         f"unequal_amplitude_empirical_limit_hz={empirical_limit(resolution_summary, 'unequal')}",
@@ -308,6 +340,7 @@ def main() -> None:
         f"simulation_stage_seconds={simulation_stage_seconds:.6f}",
         f"null_stage_seconds={null_stage_seconds:.6f}",
         f"resolution_stage_seconds={resolution_stage_seconds:.6f}",
+        f"extreme_stage_seconds={extreme_stage_seconds:.6f}",
         f"output_stage_seconds={output_stage_seconds:.6f}",
         f"mean_simulation_trial_seconds={mean_simulation_trial}",
         f"mean_main_resolution_trial_seconds={mean_main_resolution}",

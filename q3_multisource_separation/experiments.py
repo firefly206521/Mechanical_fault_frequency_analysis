@@ -26,6 +26,17 @@ AMPLITUDE_CASES = {
     "equal": (0.02, 0.02),
     "unequal": (0.01048, 0.04005),
 }
+EXTREME_CASES = (
+    "very_low_snr_-25",
+    "very_low_snr_-30",
+    "non_symmetric_close",
+    "identical_frequency",
+    "phase_cancellation",
+    "overcomplete_k8",
+    "impulsive_noise",
+    "low_frequency_boundary",
+    "high_frequency_boundary",
+)
 
 
 def trial_rng(experiment_id: int, replicate: int) -> np.random.Generator:
@@ -201,6 +212,135 @@ def run_null_trial(t: np.ndarray, fs: float, noise_std: float, replicate: int, c
     }
 
 
+def _nearest_mae(estimated: np.ndarray, truth: np.ndarray) -> float:
+    estimated = np.asarray(estimated, float)
+    truth = np.asarray(truth, float)
+    if len(estimated) == 0 or len(truth) == 0:
+        return float("nan")
+    remaining = list(estimated)
+    errors = []
+    for value in truth:
+        index = int(np.argmin(np.abs(np.asarray(remaining) - value)))
+        errors.append(abs(remaining.pop(index) - value))
+        if not remaining:
+            break
+    return float(np.mean(errors))
+
+
+def _signal_from_components(t: np.ndarray, frequencies: np.ndarray, amplitudes: np.ndarray, phases: np.ndarray) -> np.ndarray:
+    return np.sum([a * np.sin(2.0 * np.pi * f * t + p) for a, f, p in zip(amplitudes, frequencies, phases)], axis=0)
+
+
+def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: float, case_name: str, replicate: int, cfg: GLRTConfig) -> dict:
+    rng = trial_rng(4000 + EXTREME_CASES.index(case_name), replicate)
+    truth_f = np.asarray(truth_fit["frequencies_hz"], float)
+    truth_a = np.asarray([row["amplitude"] for row in truth_fit["components"]], float)
+    expected_k = None
+    success_mode = "correct_k"
+    theoretical_identifiable = True
+    noise_kind = "gaussian"
+
+    if case_name == "very_low_snr_-25":
+        frequencies = truth_f
+        amplitudes = truth_a
+        phases = rng.uniform(-np.pi, np.pi, len(frequencies))
+        total_power = float(np.sum(amplitudes ** 2 / 2.0))
+        sigma = math.sqrt(total_power / (10.0 ** (-25.0 / 10.0)))
+    elif case_name == "very_low_snr_-30":
+        frequencies = truth_f
+        amplitudes = truth_a
+        phases = rng.uniform(-np.pi, np.pi, len(frequencies))
+        total_power = float(np.sum(amplitudes ** 2 / 2.0))
+        sigma = math.sqrt(total_power / (10.0 ** (-30.0 / 10.0)))
+    elif case_name == "non_symmetric_close":
+        frequencies = np.asarray([13.502, 13.505])
+        amplitudes = np.asarray([0.04, 0.035])
+        phases = rng.uniform(-np.pi, np.pi, 2)
+        sigma = noise_std
+    elif case_name == "identical_frequency":
+        frequencies = np.asarray([13.5, 13.5])
+        amplitudes = np.asarray([0.02, 0.02])
+        phases = rng.uniform(-np.pi, np.pi, 2)
+        sigma = noise_std
+        expected_k = 1
+        success_mode = "non_identifiable"
+        theoretical_identifiable = False
+    elif case_name == "phase_cancellation":
+        frequencies = np.asarray([13.5, 13.5])
+        amplitudes = np.asarray([0.03, 0.03])
+        base_phase = rng.uniform(-np.pi, np.pi)
+        phases = np.asarray([base_phase, base_phase + np.pi + rng.normal(0.0, 0.03)])
+        sigma = noise_std
+        expected_k = 1
+        success_mode = "non_identifiable"
+        theoretical_identifiable = False
+    elif case_name == "overcomplete_k8":
+        frequencies = np.asarray([3.0, 5.5, 8.0, 11.0, 13.0, 16.0, 21.0, 29.0])
+        amplitudes = np.asarray([0.035, 0.030, 0.026, 0.023, 0.020, 0.018, 0.016, 0.014])
+        phases = rng.uniform(-np.pi, np.pi, len(frequencies))
+        total_power = float(np.sum(amplitudes ** 2 / 2.0))
+        sigma = math.sqrt(total_power / (10.0 ** (-10.0 / 10.0)))
+    elif case_name == "impulsive_noise":
+        frequencies = truth_f
+        amplitudes = truth_a
+        phases = rng.uniform(-np.pi, np.pi, len(frequencies))
+        sigma = noise_std
+        noise_kind = "gaussian_plus_impulses"
+    elif case_name == "low_frequency_boundary":
+        frequencies = np.asarray([0.08, 0.12])
+        amplitudes = np.asarray([0.04, 0.035])
+        phases = rng.uniform(-np.pi, np.pi, 2)
+        sigma = noise_std
+    elif case_name == "high_frequency_boundary":
+        frequencies = np.asarray([48.8, 49.2])
+        amplitudes = np.asarray([0.04, 0.035])
+        phases = rng.uniform(-np.pi, np.pi, 2)
+        sigma = noise_std
+    else:
+        raise ValueError(f"Unknown extreme case: {case_name}")
+
+    signal = _signal_from_components(t, frequencies, amplitudes, phases)
+    noise = rng.normal(0.0, sigma, len(t))
+    if noise_kind == "gaussian_plus_impulses":
+        spike_count = max(1, len(t) // 200)
+        indexes = rng.choice(len(t), size=spike_count, replace=False)
+        noise[indexes] += rng.normal(0.0, 12.0 * sigma, spike_count)
+    observed = signal + noise
+
+    started = time.perf_counter()
+    if case_name in {"non_symmetric_close", "identical_frequency", "phase_cancellation"}:
+        estimate = close_pair_resolver(t, observed)
+    else:
+        estimate = fast_spaced_detection(t, observed, fs, cfg)
+    elapsed = time.perf_counter() - started
+    estimated_f = np.asarray(estimate["frequencies_hz"], float)
+    true_k = len(frequencies)
+    target_k = expected_k if expected_k is not None else true_k
+    frequency_mae = _nearest_mae(estimated_f, frequencies)
+    if success_mode == "non_identifiable":
+        success = len(estimated_f) <= target_k
+    else:
+        tolerance = 0.0025 if true_k > 2 else max(0.0005, np.min(np.diff(np.sort(frequencies))) / 4.0)
+        success = len(estimated_f) == target_k and np.isfinite(frequency_mae) and frequency_mae <= tolerance and not estimate["ill_conditioned"]
+    return {
+        "case_name": case_name,
+        "replicate": replicate,
+        "sample_count": len(t),
+        "true_k": true_k,
+        "expected_k": target_k,
+        "estimated_k": len(estimated_f),
+        "success": success,
+        "frequency_mae_hz": frequency_mae,
+        "noise_kind": noise_kind,
+        "theoretical_identifiable": theoretical_identifiable,
+        "condition_design": estimate["condition_design"],
+        "ill_conditioned": estimate["ill_conditioned"],
+        "runtime_seconds": elapsed,
+        "true_frequencies_hz": ";".join(f"{value:.9g}" for value in frequencies),
+        "estimated_frequencies_hz": ";".join(f"{value:.9g}" for value in estimated_f),
+    }
+
+
 def wilson_interval(successes: int, runs: int, z: float = 1.96) -> tuple[float, float]:
     if runs == 0:
         return float("nan"), float("nan")
@@ -266,6 +406,30 @@ def summarize_resolution(rows: list[dict]) -> list[dict]:
                 "mean_music_runtime_seconds": float(np.mean([float(row["music_runtime_seconds"]) for row in group])),
                 "priority_for_more_runs": bool(main_low <= 0.90 <= main_high),
             })
+    return output
+
+
+def summarize_extreme(rows: list[dict]) -> list[dict]:
+    output = []
+    for case_name in EXTREME_CASES:
+        group = [row for row in rows if row["case_name"] == case_name]
+        if not group:
+            continue
+        successes = sum(str(row["success"]).lower() == "true" for row in group)
+        low, high = wilson_interval(successes, len(group))
+        frequency = [float(row["frequency_mae_hz"]) for row in group if np.isfinite(float(row["frequency_mae_hz"]))]
+        output.append({
+            "case_name": case_name,
+            "runs": len(group),
+            "success_rate": successes / len(group),
+            "success_ci95_low": low,
+            "success_ci95_high": high,
+            "mean_estimated_k": float(np.mean([int(row["estimated_k"]) for row in group])),
+            "median_frequency_mae_hz": float(np.median(frequency)) if frequency else float("nan"),
+            "ill_conditioned_rate": float(np.mean([str(row["ill_conditioned"]).lower() == "true" for row in group])),
+            "theoretical_identifiable": str(group[0]["theoretical_identifiable"]).lower() == "true",
+            "mean_runtime_seconds": float(np.mean([float(row["runtime_seconds"]) for row in group])),
+        })
     return output
 
 

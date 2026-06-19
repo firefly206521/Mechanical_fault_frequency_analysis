@@ -139,6 +139,7 @@ def write_report(path: Path, context: dict) -> None:
     components = context["components"]
     simulation = context["simulation_summary"]
     resolution = context["resolution_summary"]
+    extreme = context.get("extreme_summary", [])
     null_rows = context["null_rows"]
     false_alarm_rate = float(np.mean([str(row["false_alarm"]).lower() == "true" for row in null_rows])) if null_rows else float("nan")
     lines = [
@@ -188,13 +189,26 @@ def write_report(path: Path, context: dict) -> None:
     ]
     for row in resolution:
         lines.append(f"| {row['amplitude_case']} | {row['separation_hz']:.6g} | {row['main_success_rate']:.1%} | [{row['main_ci95_low']:.1%}, {row['main_ci95_high']:.1%}] | {row['music_success_rate']:.1%} | {row['median_condition_design']:.3g} | {'是' if row['priority_for_more_runs'] else '否'} |")
+    if extreme:
+        lines += [
+            "",
+            "## 5. 极端情况验证",
+            "",
+            "极端情况不用于调参，而用于说明模型的适用边界。完全同频与强相位抵消在单通道下不可唯一分离，成功标准是不误判为稳定的两个独立故障源。",
+            "",
+            "| 情况 | 重复次数 | 成功率 | 95%区间 | 平均估计阶数 | 频率MAE中位数/Hz | 不可辨识 | 病态率 |",
+            "|---|---:|---:|---:|---:|---:|---|---:|",
+        ]
+        for row in extreme:
+            mae_text = f"{row['median_frequency_mae_hz']:.6g}" if np.isfinite(row["median_frequency_mae_hz"]) else "—"
+            lines.append(f"| {row['case_name']} | {row['runs']} | {row['success_rate']:.1%} | [{row['success_ci95_low']:.1%}, {row['success_ci95_high']:.1%}] | {row['mean_estimated_k']:.2f} | {mae_text} | {'否' if row['theoretical_identifiable'] else '是'} | {row['ill_conditioned_rate']:.1%} |")
     lines += [
         "",
         "FFT频点间隔 $1/T=0.0025$ Hz不是参数估计的绝对下限。联合参数模型可以在有利SNR下实现超分辨率，但频率接近时设计矩阵逐渐病态；频率完全相同时，只能识别两个正弦的矢量和。",
         "",
         "近频区域的局部线性化参数置信区间可能低估不确定性，因此本文以Monte Carlo经验成功率和Wilson区间作为主要依据。",
         "",
-        "## 5. 结论",
+        "## 6. 结论",
         "",
         "多峰GLRT负责控制误报并提出候选频率，多频联合谐波回归负责分离波形和估计参数，BIC负责自动确定故障源数量。残差、分段稳定性、已知真值仿真和近频实验共同评价模型。",
     ]
