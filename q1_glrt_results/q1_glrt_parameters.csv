@@ -1,0 +1,9 @@
+﻿parameter,value,unit,meaning
+f_min,0.05,Hz,lower bound of frequency search
+f_max,49.5,Hz,upper bound of frequency search
+p_fa,0.05,-,target false alarm rate
+glrt_mc,500,runs,Monte Carlo runs for threshold
+random_seed,20260619,-,reproducible random seed
+preprocess,linear detrend,-,remove DC and linear trend
+refine_half_width,"max(3*fs/N, 0.01)",Hz,local frequency refinement window
+success_tolerance,0.05,Hz,simulation success if frequency error is within this bound

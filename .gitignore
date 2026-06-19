@@ -3,8 +3,9 @@
 *.xlsx
 *.xls
 
-# 文档
+# 文档（除 README 外）
 *.md
+!README.md
 *.pdf
 *.doc
 *.docx
@@ -30,9 +31,18 @@ __pycache__/
 *.pyo
 *.pyd
 
-# 结果输出目录
-q1_results/
-q1_glrt_results/
+# 结果输出目录（解除目录级忽略，用文件类型控制）
+# 但结果目录中的产物应追踪（供协作者直接查看）
+!q1_results/*.png
+!q1_results/*.csv
+!q1_results/*.md
+!q1_glrt_results/*.png
+!q1_glrt_results/*.csv
+!q1_glrt_results/*.md
+
+# 本地 IDE 与工作流配置
+.claude/
+AGENTS.md
 
 # 系统文件
 Thumbs.db
