@@ -36,6 +36,7 @@ class GLRTConfig:
     p_fa: float = 0.005
     glrt_mc: int = 500
     random_seed: int = SEED
+    threshold: float | None = None
 
 
 def q1_compatible_glrt_stat(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
@@ -200,7 +201,7 @@ def glrt_scan(residual: np.ndarray, fs: float, cfg: GLRTConfig, fitted_parameter
     if len(local) == 0:
         local = indexes
     order = local[np.argsort(corrected[local])[::-1]]
-    threshold = q1_compatible_glrt_threshold(len(residual), fs, cfg)
+    threshold = cfg.threshold if cfg.threshold is not None else q1_compatible_glrt_threshold(len(residual), fs, cfg)
     return {
         "frequencies": frequencies,
         "statistic": corrected,

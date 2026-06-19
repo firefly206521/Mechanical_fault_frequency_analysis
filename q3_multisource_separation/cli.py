@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +22,7 @@ from .core import (
     GLRTConfig,
     load_multi_source,
     multi_harmonic_fit,
+    q1_compatible_glrt_threshold,
     segment_stability,
 )
 from .experiments import (
@@ -33,6 +37,65 @@ from .experiments import (
     summarize_simulation,
 )
 from .outputs import append_csv_rows, read_csv_rows, write_plots, write_report
+
+
+_WORKER_T = None
+_WORKER_FS = None
+_WORKER_FIT = None
+_WORKER_CFG = None
+_WORKER_NOISE_STD = None
+_WORKER_MUSIC_STEP = None
+
+
+def _init_worker(t, fs, fit, cfg, noise_std, music_step) -> None:
+    global _WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_CFG, _WORKER_NOISE_STD, _WORKER_MUSIC_STEP
+    _WORKER_T = t
+    _WORKER_FS = fs
+    _WORKER_FIT = fit
+    _WORKER_CFG = cfg
+    _WORKER_NOISE_STD = noise_std
+    _WORKER_MUSIC_STEP = music_step
+
+
+def _simulation_worker(task: tuple[float, int]) -> dict:
+    snr, replicate = task
+    return run_simulation_trial(_WORKER_T, _WORKER_FS, _WORKER_FIT, snr, replicate, _WORKER_CFG)
+
+
+def _null_worker(replicate: int) -> dict:
+    return run_null_trial(_WORKER_T, _WORKER_FS, _WORKER_NOISE_STD, replicate, _WORKER_CFG)
+
+
+def _resolution_worker(task: tuple[str, float, int]) -> dict:
+    case, separation, replicate = task
+    return run_resolution_trial(_WORKER_T, _WORKER_NOISE_STD, separation, case, replicate, _WORKER_MUSIC_STEP)
+
+
+def _run_tasks(label: str, tasks: list, worker, workers: int, started: float) -> list[dict]:
+    if not tasks:
+        return []
+    rows = []
+    if workers <= 1:
+        for count, task in enumerate(tasks, 1):
+            rows.append(worker(task))
+            if count % 20 == 0 or count == len(tasks):
+                _progress(label, count, len(tasks), started)
+        return rows
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        initializer=_init_worker,
+        initargs=(_WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_CFG, _WORKER_NOISE_STD, _WORKER_MUSIC_STEP),
+    ) as pool:
+        for count, row in enumerate(pool.map(worker, tasks), 1):
+            rows.append(row)
+            if count % 20 == 0 or count == len(tasks):
+                _progress(label, count, len(tasks), started)
+    return rows
+
+
+def _append_in_chunks(path: Path, rows: list[dict], chunk_size: int = 20) -> None:
+    for index in range(0, len(rows), chunk_size):
+        append_csv_rows(path, rows[index:index + chunk_size])
 
 
 def locate_data(workspace: Path, explicit: Path | None) -> Path:
@@ -53,6 +116,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--glrt-mc", type=int, default=500)
     parser.add_argument("--max-components", type=int, default=10)
     parser.add_argument("--music-local-grid-step", type=float, default=0.000025)
+    parser.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1))
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--skip-simulation", action="store_true")
     parser.add_argument("--skip-resolution", action="store_true")
@@ -72,7 +136,9 @@ def _progress(label: str, completed: int, target: int, started: float) -> None:
 
 
 def main() -> None:
+    global _WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_CFG, _WORKER_NOISE_STD, _WORKER_MUSIC_STEP
     args = parse_args()
+    workers = max(1, args.workers)
     package_dir = Path(__file__).resolve().parent
     workspace = package_dir.parent
     output_dir = (args.output_dir or workspace / "q3_multisource_separation_results").resolve()
@@ -91,6 +157,7 @@ def main() -> None:
         glrt_mc=args.glrt_mc,
         random_seed=SEED,
     )
+    cfg = replace(cfg, threshold=q1_compatible_glrt_threshold(len(y), fs, cfg))
 
     actual_started = time.perf_counter()
     fit, history = detect_multitone(t, y, fs, cfg, max_components=args.max_components)
@@ -137,6 +204,12 @@ def main() -> None:
     simulation_path = output_dir / "q3_simulation_trials.csv"
     resolution_path = output_dir / "q3_resolution_trials.csv"
     null_path = output_dir / "q3_null_trials.csv"
+    _WORKER_T = t
+    _WORKER_FS = fs
+    _WORKER_FIT = fit
+    _WORKER_CFG = cfg
+    _WORKER_NOISE_STD = noise_std
+    _WORKER_MUSIC_STEP = args.music_local_grid_step
     if not args.resume:
         for path in [simulation_path, resolution_path, null_path]:
             if path.exists():
@@ -146,17 +219,13 @@ def main() -> None:
     simulation_rows = read_csv_rows(simulation_path)
     if not args.skip_simulation:
         existing = {(float(row["snr_total_db"]), int(row["replicate"])) for row in simulation_rows}
+        tasks = []
         for snr in SNR_LEVELS:
             pending = [rep for rep in range(args.simulation_runs) if (snr, rep) not in existing]
-            batch = []
-            condition_started = time.perf_counter()
-            for count, replicate in enumerate(pending, 1):
-                batch.append(run_simulation_trial(t, fs, fit, snr, replicate, cfg))
-                if len(batch) == 20 or count == len(pending):
-                    append_csv_rows(simulation_path, batch)
-                    simulation_rows.extend(batch)
-                    batch.clear()
-                    _progress(f"多源仿真 SNR={snr:g} dB", count, len(pending), condition_started)
+            tasks.extend((snr, replicate) for replicate in pending)
+        new_rows = _run_tasks("多源仿真", tasks, _simulation_worker, workers, simulation_stage_started)
+        _append_in_chunks(simulation_path, new_rows)
+        simulation_rows.extend(new_rows)
     simulation_stage_seconds = time.perf_counter() - simulation_stage_started
 
     null_stage_started = time.perf_counter()
@@ -164,33 +233,23 @@ def main() -> None:
     if not args.skip_null:
         existing = {int(row["replicate"]) for row in null_rows}
         pending = [rep for rep in range(args.null_runs) if rep not in existing]
-        batch = []
-        condition_started = time.perf_counter()
-        for count, replicate in enumerate(pending, 1):
-            batch.append(run_null_trial(t, fs, noise_std, replicate, cfg))
-            if len(batch) == 20 or count == len(pending):
-                append_csv_rows(null_path, batch)
-                null_rows.extend(batch)
-                batch.clear()
-                _progress("纯噪声误报实验", count, len(pending), condition_started)
+        new_rows = _run_tasks("纯噪声误报实验", pending, _null_worker, workers, null_stage_started)
+        _append_in_chunks(null_path, new_rows)
+        null_rows.extend(new_rows)
     null_stage_seconds = time.perf_counter() - null_stage_started
 
     resolution_stage_started = time.perf_counter()
     resolution_rows = read_csv_rows(resolution_path)
     if not args.skip_resolution:
         existing = {(row["amplitude_case"], float(row["separation_hz"]), int(row["replicate"])) for row in resolution_rows}
+        tasks = []
         for case in AMPLITUDE_CASES:
             for separation in SEPARATIONS:
                 pending = [rep for rep in range(args.resolution_runs) if (case, separation, rep) not in existing]
-                batch = []
-                condition_started = time.perf_counter()
-                for count, replicate in enumerate(pending, 1):
-                    batch.append(run_resolution_trial(t, noise_std, separation, case, replicate, args.music_local_grid_step))
-                    if len(batch) == 20 or count == len(pending):
-                        append_csv_rows(resolution_path, batch)
-                        resolution_rows.extend(batch)
-                        batch.clear()
-                        _progress(f"近频实验 {case}, Δf={separation:g} Hz", count, len(pending), condition_started)
+                tasks.extend((case, separation, replicate) for replicate in pending)
+        new_rows = _run_tasks("近频实验", tasks, _resolution_worker, workers, resolution_stage_started)
+        _append_in_chunks(resolution_path, new_rows)
+        resolution_rows.extend(new_rows)
     resolution_stage_seconds = time.perf_counter() - resolution_stage_started
 
     simulation_summary = summarize_simulation(simulation_rows)
@@ -223,22 +282,21 @@ def main() -> None:
     mean_main_resolution = float(np.mean([float(row["main_runtime_seconds"]) for row in resolution_rows])) if resolution_rows else float("nan")
     mean_music_resolution = float(np.mean([float(row["music_runtime_seconds"]) for row in resolution_rows])) if resolution_rows else float("nan")
     mean_null_trial = float(np.mean([float(row["runtime_seconds"]) for row in null_rows])) if null_rows else float("nan")
-    estimated_full = actual_analysis_seconds + output_stage_seconds
-    if np.isfinite(mean_simulation_trial):
-        estimated_full += mean_simulation_trial * len(SNR_LEVELS) * args.simulation_runs
-    if np.isfinite(mean_main_resolution) and np.isfinite(mean_music_resolution):
-        estimated_full += (
-            (mean_main_resolution + mean_music_resolution)
-            * len(AMPLITUDE_CASES)
-            * len(SEPARATIONS)
-            * args.resolution_runs
-        )
-    if np.isfinite(mean_null_trial):
-        estimated_full += mean_null_trial * args.null_runs
+    target_simulation_rows = len(SNR_LEVELS) * args.simulation_runs
+    target_resolution_rows = len(AMPLITUDE_CASES) * len(SEPARATIONS) * args.resolution_runs
+    target_null_rows = args.null_runs
+    estimated_full = load_seconds + actual_analysis_seconds + output_stage_seconds
+    if simulation_rows:
+        estimated_full += simulation_stage_seconds * target_simulation_rows / len(simulation_rows)
+    if resolution_rows:
+        estimated_full += resolution_stage_seconds * target_resolution_rows / len(resolution_rows)
+    if null_rows:
+        estimated_full += null_stage_seconds * target_null_rows / len(null_rows)
     runtime_lines = [
         f"simulation_target_runs={args.simulation_runs}",
         f"resolution_target_runs={args.resolution_runs}",
         f"null_target_runs={args.null_runs}",
+        f"workers={workers}",
         f"simulation_completed_rows={len(simulation_rows)}",
         f"resolution_completed_rows={len(resolution_rows)}",
         f"null_completed_rows={len(null_rows)}",
