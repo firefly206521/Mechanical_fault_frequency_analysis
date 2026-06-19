@@ -39,6 +39,10 @@ __pycache__/
 !q1_glrt_results/*.png
 !q1_glrt_results/*.csv
 !q1_glrt_results/*.md
+!q2_harmonic_recovery/*.md
+!q2_harmonic_recovery_results/*.png
+!q2_harmonic_recovery_results/*.csv
+!q2_harmonic_recovery_results/*.md
 
 # 变更日志（追踪）
 !**/.log/change/*.md
