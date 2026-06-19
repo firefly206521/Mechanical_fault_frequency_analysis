@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import math
 import warnings
-from statistics import NormalDist
 from pathlib import Path
 
 import numpy as np
@@ -52,6 +51,21 @@ def wrap_phase(value: np.ndarray | float) -> np.ndarray | float:
 def align_phase_to_reference(value: np.ndarray | float, reference: float) -> np.ndarray | float:
     """Move wrapped phase values onto the continuous branch around reference."""
     return reference + wrap_phase(np.asarray(value) - reference)
+
+
+def phase_in_circular_ci(value: float, center: float, half_width: float) -> bool:
+    """Check whether a wrapped phase value lies inside a circular CI."""
+    if half_width >= math.pi:
+        return True
+    value_wrapped = float(wrap_phase(value))
+    center_wrapped = float(wrap_phase(center))
+    low = center_wrapped - half_width
+    high = center_wrapped + half_width
+    if low < -math.pi:
+        return value_wrapped >= low + 2.0 * math.pi or value_wrapped <= high
+    if high > math.pi:
+        return value_wrapped >= low or value_wrapped <= high - 2.0 * math.pi
+    return low <= value_wrapped <= high
 
 
 def harmonic_fit(t: np.ndarray, y: np.ndarray, frequency: float) -> dict:
@@ -546,7 +560,6 @@ def simulation_validation(
     rng = np.random.default_rng(seed + 100)
     t = np.arange(n, dtype=float) / fs
     rows = []
-    normal = NormalDist()
     for snr_db in [-20.0, -15.0, -12.0, -10.0, -5.0]:
         freq_errors, amp_rel_errors, phase_errors, waveform_rmse = [], [], [], []
         cover_f, cover_a, cover_phi = [], [], []
@@ -576,7 +589,7 @@ def simulation_validation(
             se_phi = math.sqrt(max(float(grad_po @ cov @ grad_po), 0.0))
             cover_f.append(abs(est["frequency_hz"] - f_true) <= 1.96 * se_f)
             cover_a.append(abs(est["amplitude"] - amplitude) <= 1.96 * se_A)
-            cover_phi.append(abs(aligned_phase - phi_true) <= 1.96 * se_phi)
+            cover_phi.append(phase_in_circular_ci(phi_true, est["phase_origin_rad"], 1.96 * se_phi))
         rows.append({
             "snr_db": snr_db,
             "runs": runs_per_snr,

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 
@@ -88,7 +89,6 @@ def residual_diagnostics_svg(path: Path, residual: np.ndarray) -> None:
     centers = (edges[:-1] + edges[1:]) / 2
     normal = np.exp(-centers**2 / 2) / math.sqrt(2 * math.pi)
     acf = autocorrelation(residual, 100)
-    from statistics import NormalDist
     sample = np.sort(z[::max(1, len(z)//2000)])
     probs = (np.arange(len(sample)) + 0.5) / len(sample)
     theoretical = np.asarray([NormalDist().inv_cdf(float(p)) for p in probs])

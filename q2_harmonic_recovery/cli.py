@@ -90,7 +90,7 @@ def main():
         {"model": "common frequency", "parameters": 25, "sse": model_50["common_frequency_sse"], "bic": model_50["common_frequency_bic"]},
         {"model": "independent frequencies", "parameters": 32, "sse": model_50["independent_frequencies_sse"], "bic": model_50["independent_frequencies_bic"]},
     ]
-    filter_rows, filtered, envelope = targeted_filter_comparison(t, y, fit, fs)
+    filter_rows, filtered, _ = targeted_filter_comparison(t, y, fit, fs)
     ssa_rows, ssa_best, ssa_best_window = ssa_recovery_comparison(t, y, fit, fs)
     # Use the same 40,001 samples as the real record so simulation accuracy is
     # directly comparable with the full-data recovery task.
