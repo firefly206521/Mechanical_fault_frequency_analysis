@@ -74,6 +74,16 @@ def frequency_bounds(freqs: np.ndarray, cfg: Config) -> np.ndarray:
     return (freqs >= cfg.f_min) & (freqs <= cfg.f_max)
 
 
+def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
+    mask = frequency_bounds(freqs, cfg)
+    if not np.any(mask):
+        raise ValueError(
+            f"No frequency bins in search range [{cfg.f_min:g}, {cfg.f_max:g}] Hz. "
+            "Check f_min/f_max against the sampling rate."
+        )
+    return mask
+
+
 def estimate_sinusoid(t: np.ndarray, x: np.ndarray, freq: float) -> dict[str, float]:
     omega_t = 2.0 * np.pi * freq * t
     design = np.column_stack([np.sin(omega_t), np.cos(omega_t), np.ones_like(t)])
@@ -144,7 +154,7 @@ def fft_spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
 
 def model_fft_peak(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
     freqs, power = fft_spectrum(x, fs)
-    mask = frequency_bounds(freqs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(power[mask])]
     return {
         "detected": True,
@@ -165,7 +175,7 @@ def model_welch_psd(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dic
         noverlap=4096,
         scaling="spectrum",
     )
-    mask = frequency_bounds(freqs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(psd[mask])]
     return {
         "detected": True,
@@ -194,7 +204,7 @@ def local_median_floor(values: np.ndarray, train: int, guard: int) -> np.ndarray
 
 def model_cfar_fft(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
     freqs, power = fft_spectrum(x, fs)
-    mask = frequency_bounds(freqs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     idx_all = np.where(mask)[0]
     band_power = power[idx_all]
     floor = local_median_floor(band_power, cfg.cfar_train, cfg.cfar_guard)
@@ -242,7 +252,7 @@ def estimate_glrt_threshold(n: int, fs: float, cfg: Config) -> float:
     for i in range(cfg.glrt_mc):
         noise = rng.normal(0.0, 1.0, n)
         freqs, stat = glrt_stat_from_fft(noise, fs, cfg)
-        mask = frequency_bounds(freqs, cfg)
+        mask = require_frequency_mask(freqs, cfg)
         maxima[i] = float(np.max(stat[mask]))
     threshold = float(np.quantile(maxima, 1.0 - cfg.p_fa))
     GLRT_THRESHOLD_CACHE[key] = threshold
@@ -251,7 +261,7 @@ def estimate_glrt_threshold(n: int, fs: float, cfg: Config) -> float:
 
 def model_glrt(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
-    mask = frequency_bounds(freqs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(stat[mask])]
     threshold = estimate_glrt_threshold(len(x), fs, cfg)
     return {
@@ -291,7 +301,7 @@ def ssa_denoise(x: np.ndarray, window: int = 400, rank: int = 2) -> np.ndarray:
 def model_ssa_fft(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
     denoised = ssa_denoise(x)
     freqs, power = fft_spectrum(denoised, fs)
-    mask = frequency_bounds(freqs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(power[mask])]
     return {
         "detected": True,

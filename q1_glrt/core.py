@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import math
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -18,6 +20,7 @@ from q1_model_compare import (
     load_single_source,
     preprocess,
     refine_frequency,
+    synthetic_signal,
 )
 
 
@@ -32,11 +35,30 @@ GLRT_PARAMETERS = {
 }
 
 
-def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
-    t, x, fs = load_single_source(cfg.data_path)
-    y = preprocess(x)
-    freqs, stat = glrt_stat_from_fft(y, fs, cfg)
+@lru_cache(maxsize=4)
+def _load_q1_data_cached(data_path: str) -> tuple[np.ndarray, np.ndarray, float]:
+    return load_single_source(Path(data_path))
+
+
+def load_q1_data(cfg: Config) -> tuple[np.ndarray, np.ndarray, float]:
+    return _load_q1_data_cached(str(Path(cfg.data_path).resolve()))
+
+
+def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
     mask = frequency_bounds(freqs, cfg)
+    if not np.any(mask):
+        raise ValueError(
+            f"No frequency bins in search range [{cfg.f_min:g}, {cfg.f_max:g}] Hz. "
+            "Check --f-min/--f-max against the sampling rate."
+        )
+    return mask
+
+
+def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
+    t, x, fs = load_q1_data(cfg)
+    y = preprocess(x)
+    freqs, stat = glrt_stat_from_fft(x, fs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     search_freqs = freqs[mask]
     search_stat = stat[mask]
     best_local = int(np.argmax(search_stat))
@@ -66,8 +88,8 @@ def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
 
 def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
     y = preprocess(x)
-    freqs, stat = glrt_stat_from_fft(y, fs, cfg)
-    mask = frequency_bounds(freqs, cfg)
+    freqs, stat = glrt_stat_from_fft(x, fs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     search_freqs = freqs[mask]
     search_stat = stat[mask]
     best_local = int(np.argmax(search_stat))
@@ -89,8 +111,8 @@ def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> 
 
 def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
     y = preprocess(x)
-    freqs, power = fft_spectrum(y, fs)
-    mask = frequency_bounds(freqs, cfg)
+    freqs, power = fft_spectrum(x, fs)
+    mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(power[mask])]
     coarse_freq = float(freqs[idx])
     refined = refine_frequency(t, y, coarse_freq, fs)
@@ -115,13 +137,16 @@ def recovered_signal(t: np.ndarray, x: np.ndarray, freq: float) -> np.ndarray:
 
 
 def analyze_preprocessing_and_noise(cfg: Config, result: dict[str, float | bool | str]) -> pd.DataFrame:
-    t, x, fs = load_single_source(cfg.data_path)
+    t, x, fs = load_q1_data(cfg)
     y = preprocess(x)
     s_hat = recovered_signal(t, x, float(result["refined_frequency_hz"]))
     residual = y - s_hat
     signal_power = float(np.mean(s_hat * s_hat))
     residual_power = float(np.mean(residual * residual))
-    estimated_snr_db = 10.0 * math.log10(signal_power / residual_power)
+    if signal_power <= 0.0 or residual_power <= 0.0:
+        estimated_snr_db = float("nan")
+    else:
+        estimated_snr_db = 10.0 * math.log10(signal_power / residual_power)
 
     rows = [
         {"metric": "sample_count", "value": len(x), "note": "样本数量"},
@@ -157,7 +182,7 @@ def build_parameter_table(cfg: Config) -> pd.DataFrame:
 
 
 def run_segment_validation(cfg: Config, segment_seconds: float = 50.0) -> pd.DataFrame:
-    t, x, fs = load_single_source(cfg.data_path)
+    t, x, fs = load_q1_data(cfg)
     segment_len = int(round(segment_seconds * fs))
     rows = []
     for start in range(0, len(x), segment_len):
@@ -166,7 +191,7 @@ def run_segment_validation(cfg: Config, segment_seconds: float = 50.0) -> pd.Dat
             continue
         seg_t = t[start:end]
         seg_x = x[start:end]
-        detected = glrt_detect_signal(seg_t, seg_x, fs, Config(**{**cfg.__dict__, "output_dir": cfg.output_dir}))
+        detected = glrt_detect_signal(seg_t, seg_x, fs, cfg)
         rows.append(
             {
                 "segment_id": len(rows) + 1,
@@ -182,23 +207,6 @@ def run_segment_validation(cfg: Config, segment_seconds: float = 50.0) -> pd.Dat
             }
         )
     return pd.DataFrame(rows)
-
-
-def synthetic_signal(
-    fs: float,
-    n: int,
-    f0: float,
-    amplitude: float,
-    snr_db: float,
-    rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray]:
-    t = np.arange(n, dtype=float) / fs
-    phase = rng.uniform(0.0, 2.0 * np.pi)
-    s = amplitude * np.sin(2.0 * np.pi * f0 * t + phase)
-    signal_power = float(np.mean(s * s))
-    noise_power = signal_power / (10.0 ** (snr_db / 10.0))
-    x = s + rng.normal(0.0, math.sqrt(noise_power), n)
-    return t, x
 
 
 def run_fft_glrt_simulation(

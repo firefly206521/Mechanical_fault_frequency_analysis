@@ -33,6 +33,8 @@ from q1_glrt.outputs import (
     write_report,
 )
 
+write_parameter_table = build_parameter_table
+
 __all__ = [
     "GLRT_PARAMETERS",
     "analyze_preprocessing_and_noise",
@@ -55,6 +57,7 @@ __all__ = [
     "synthetic_signal",
     "write_all_outputs",
     "write_csv_outputs",
+    "write_parameter_table",
     "write_report",
 ]
 

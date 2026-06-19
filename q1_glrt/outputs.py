@@ -8,14 +8,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from q1_glrt.core import recovered_signal
+from q1_glrt.core import load_q1_data, recovered_signal, require_frequency_mask
 from q1_model_compare import (
     Config,
     SHEET_SINGLE,
     fft_spectrum,
-    frequency_bounds,
     glrt_stat_from_fft,
-    load_single_source,
     preprocess,
 )
 
@@ -45,7 +43,7 @@ def write_csv_outputs(
 
 
 def plot_noise_analysis(cfg: Config, result: dict[str, float | bool | str]) -> None:
-    t, x, _ = load_single_source(cfg.data_path)
+    t, x, _ = load_q1_data(cfg)
     y = preprocess(x)
     s_hat = recovered_signal(t, x, float(result["refined_frequency_hz"]))
     residual = y - s_hat
@@ -126,9 +124,9 @@ def plot_frequency_error_snr(sim_df: pd.DataFrame, cfg: Config) -> None:
 
 
 def plot_glrt_statistic(cfg: Config, result: dict[str, float | bool | str]) -> None:
-    _, x, fs = load_single_source(cfg.data_path)
-    freqs, stat = glrt_stat_from_fft(preprocess(x), fs, cfg)
-    mask = frequency_bounds(freqs, cfg)
+    _, x, fs = load_q1_data(cfg)
+    freqs, stat = glrt_stat_from_fft(x, fs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
     plot_freqs = freqs[mask]
     plot_stat = stat[mask]
     peak_freq = float(result["refined_frequency_hz"])
@@ -160,9 +158,9 @@ def plot_glrt_statistic(cfg: Config, result: dict[str, float | bool | str]) -> N
 
 
 def plot_fft_baseline(cfg: Config, result: dict[str, float | bool | str]) -> None:
-    _, x, fs = load_single_source(cfg.data_path)
+    _, x, fs = load_q1_data(cfg)
     freqs, power = fft_spectrum(x, fs)
-    mask = frequency_bounds(freqs, cfg)
+    mask = require_frequency_mask(freqs, cfg)
 
     plt.figure(figsize=(10, 5))
     plt.semilogy(freqs[mask], power[mask], linewidth=1.0, label="Hann FFT 功率谱")
@@ -177,7 +175,7 @@ def plot_fft_baseline(cfg: Config, result: dict[str, float | bool | str]) -> Non
 
 
 def plot_recovered_signal(cfg: Config, result: dict[str, float | bool | str]) -> None:
-    t, x, _ = load_single_source(cfg.data_path)
+    t, x, _ = load_q1_data(cfg)
     y = preprocess(x)
     s_hat = recovered_signal(t, x, float(result["refined_frequency_hz"]))
     zoom_mask = t <= 10.0

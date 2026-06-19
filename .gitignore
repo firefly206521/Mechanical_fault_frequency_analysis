@@ -40,6 +40,9 @@ __pycache__/
 !q1_glrt_results/*.csv
 !q1_glrt_results/*.md
 
+# 变更日志（追踪）
+!**/.log/change/*.md
+
 # 本地 IDE 与工作流配置
 .claude/
 AGENTS.md
