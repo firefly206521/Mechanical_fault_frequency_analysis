@@ -1,297 +1,289 @@
-﻿# Q3 Code Review 20260619
+# Q3 多源分离代码审查报告
 
-## Summary
-
-- **总体判断**：代码质量中等偏上，核心算法逻辑（多峰GLRT顺序检测、BIC定阶、联合最小二乘）正确，无导致结果严重错误的 P0 问题。存在若干影响统计可靠性与可维护性的 P1/P2 问题，以及一批性能优化点。
-- **是否建议先跑 200 次**：可以，但建议先修复 P1 问题后再跑，以保证 200 次结果的可靠性。
-- **是否存在阻塞级问题**：否（无 P0）。核心数学逻辑经小规模 10 次运行已验证趋势合理。
-- **建议先修复数量**：2（P1）
-- **可延后修复数量**：4（P2）+ 4（P3）
+**审查日期**: 2026-06-19
+**审查范围**: q3_multisource_separation/ 全部源文件 (core.py, cli.py, experiments.py, outputs.py, run_q3.py, __init__.py)
+**审查强度**: xhigh — 9 个独立角度并行扫描
+**审查方法**: 多角度并行发现 → 交叉验证 → 去重合成
 
 ---
 
-## Findings
+## 总览
 
-### P1 - 001 `estimated_full_200` 使用硬编码次数而非 CLI 参数
+| 严重级别 | 数量 |
+|---|---|
+| 🔴 CRITICAL — 错误结果或崩溃 | 7 |
+| 🟠 HIGH — 架构/设计不一致 | 4 |
+| 🟡 MEDIUM — 健壮性/可维护性 | 6 |
+| 🔵 LOW — 效率/代码复用 | 5 |
+| **合计** | **22** |
 
-- **文件**：`q3_multisource_separation/cli.py`
-- **行号**：226-232
-- **严重度**：P1
-- **类型**：正确性 / 输出一致性
-- **问题**：`estimated_full_200_seconds` 的计算公式中硬编码了 `200`（仿真与近频）和 `500`（纯噪声），而非使用 `args.simulation_runs`、`args.resolution_runs`、`args.null_runs`。当用户以非默认参数运行时（如 `--simulation-runs 500`），估算值系统性偏离实际。
-```
-# 当前代码：
-estimated_full_200 += mean_simulation_trial * len(SNR_LEVELS) * 200
-estimated_full_200 += (mean_main + mean_music) * len(AMPLITUDE_CASES) * len(SEPARATIONS) * 200
-estimated_full_200 += mean_null_trial * 500
-```
-- **影响**：
-  - `q3_runtime.txt` 中输出的估算值与实际目标运行次数完全不匹配，误导用户对耗时的判断。
-  - 字段名 `estimated_full_200_seconds` 与计算内容一致（都是 200），但当传入非 200 参数时，行名与实际含义产生错位。
-- **复现场景**：`python run_q3.py --simulation-runs 500 --resolution-runs 500 --null-runs 1000`，输出的 `estimated_full_200_seconds` 仍按 200/500 估算，低估实际总耗时。
-- **建议修复**：将硬编码的 200/500 替换为对应的 CLI 参数，同时将字段名改为 `estimated_full_seconds`（去掉 "200"）或追加实际目标次数后缀。
+---
+
+## 🔴 严重缺陷
+
+### B1. MUSIC 导向矢量使用绝对时间代替采样周期
+
+- **文件**: core.py:531
+- **发现角度**: A(逐行bug扫描) / C(跨文件追踪) / E(wrapper正确性) — **3个独立角度同时命中**
+
+core.py:513 丢弃了 baseband_series 返回的采样率 fsb:
 ```python
-if np.isfinite(mean_simulation_trial):
-    estimated_full += mean_simulation_trial * len(SNR_LEVELS) * args.simulation_runs
-if np.isfinite(mean_main_resolution) and np.isfinite(mean_music_resolution):
-    estimated_full += (mean_main_resolution + mean_music_resolution) * len(AMPLITUDE_CASES) * len(SEPARATIONS) * args.resolution_runs
-if np.isfinite(mean_null_trial):
-    estimated_full += mean_null_trial * args.null_runs
+tb, z, _ = baseband_series(t, x, center_hz)
 ```
-- **是否阻塞 200 次测试**：是。200 次默认参数下无影响，但该问题将导致任何非默认参数的运行产生误导性输出。
+
+core.py:531 用 tb[1]（绝对时间）代替采样周期:
+```python
+steering = np.exp(1j * 2.0 * np.pi * np.arange(order)[:, None] * tb[1] * grid[None, :])
+```
+
+**问题**: `tb[1]` = `t[0] + Ts`，而不是 `Ts`。当 `t[0] != 0` 时，导向矢量中的相位项为 `n * (t[0] + Ts) * grid_val` 而非正确的 `n * Ts * grid_val`，引入频变相位失真，MUSIC 伪谱峰值系统性偏移。`close_pair_resolver` 正确地使用了 `fsb`；MUSIC 因用 `_` 丢弃返回值而无法获得正确采样周期。
+
+**触发条件**: 任何时间轴不从零开始的数据集。
+
+**修复**:
+- Line 513: `tb, z, fsb = baseband_series(t, x, center_hz)`
+- Line 531: 用 `1.0 / fsb` 或 `tb[1] - tb[0]` 代替 `tb[1]`
 
 ---
 
-### P1 - 002 `read_csv_rows` 每阶段全量读取 CSV，200 次后 I/O 显著放大
+### B2. golden_minimize 在频带边界收到 hi < lo
 
-- **文件**：`q3_multisource_separation/cli.py`
-- **行号**：146-193（三阶段重复模式）
-- **严重度**：P1
-- **类型**：性能
-- **问题**：在 simulation、null、resolution 三个阶段各调用两次 `read_csv_rows`（阶段开始时 + 运行结束后），每次将整个 CSV 文件读入 `list[dict]`。在 200 次运行规模下：
-  - `simulation_trials.csv`：5 SNR × 200 行 = 1000 行，每行约 20 字段
-  - `resolution_trials.csv`：12 间隔 × 2 振幅 × 200 行 = 4800 行，每行约 30 字段
-  - `null_trials.csv`：500 行
-  - 合计单次全量读取约 6300 行 dict 构造，每阶段读取两次，另外每 20 行 flush 一次也会产生额外 IO
-- **影响**：
-  - 10 次运行时此开销可忽略（~43s 中占比极小）。
-  - 200 次运行时，仅读取 CSV 累计就可能达数万行 dict 构造 × 多次读取。若结合 `--resume` 重复读取已完成的 CSV，I/O 开销叠加。
-  - 读取的全部字段中，仅 `existing` 所需的 key 字段（2-3 列）被使用，其余字段被丢弃，浪费严重。
-- **复现场景**：`python run_q3.py --simulation-runs 200 --resolution-runs 200`，等待三阶段各两次全量 CSV 读取。
-- **建议修复**（P1 快速修复版 / P2 完整优化版）：
-  1. **快速修复**：在 `cli.py` main() 中将 `simulation_rows`、`resolution_rows`、`null_rows` 作为可变列表维护，追加时就地 `extend`，避免阶段结束时重复 `read_csv_rows`。
-  2. **深度优化**：实现 `read_csv_keys(path, key_columns)` 只读指定列，或将 `existing` 集合持久化到单独的 key 文件。
-- **是否阻塞 200 次测试**：是。10 次运行时 ~43s 尚可，200 次时 I/O 放大可能使运行时间超出可接受范围。
-
----
-
-### P2 - 003 `close_pair_resolver` 基带对称性约束过于严格
-
-- **文件**：`q3_multisource_separation/core.py`
-- **行号**：385-388
-- **严重度**：P2
-- **类型**：健壮性 / 边界条件
-- **问题**：坐标下降法对两个基带频偏进行交替优化时，使用 `min(-1e-7, values[1] - 1e-7)` 强制左频率的搜索上限为负值，`max(1e-7, values[0] + 1e-7)` 强制右频率的搜索下限为正值。这隐含假设两个频率始终对称分布在 `center_hz`（固定为 13.5 Hz）两侧。
+- **文件**: core.py:402-403 及 core.py:409-410
+- **发现角度**: A / E — 2个独立角度
 
 ```python
-left_hi = min(-1e-7, values[1] - 1e-7)           # 使 values[0] 无法 ≥0
-right_lo = max(1e-7, values[0] + 1e-7)            # 使 values[1] 无法 ≤0
+left_hi = min(values[1] - 1e-7, 0.012)
+values[0] = golden_minimize(objective, -0.012, left_hi, iterations=18)
 ```
 
-- **影响**：
-  - 在当前测试用例（`run_resolution_trial` 中两频率始终以 13.5 Hz 对称，`seeds` 也是对称构造）下，此约束不产生错误。
-  - 若将此函数复用于非对称近频场景（两频率均大于或均小于 `center_hz`），优化将无法达到全局最优甚至完全失败。
-- **复现场景**：`close_pair_resolver(t, x, center_hz=13.5)`，输入信号两频率为 13.5002 Hz 和 13.5005 Hz（均大于 center_hz）。坐标下降将左频率限制在负频偏区域，永远无法收敛到 [0.0002, 0.0005] Hz 的全局最优。
-- **建议修复**：移除对称性硬约束，仅保留 `values[0] < values[1]` 的排序约束：
-```python
-left_hi = values[1] - 1e-7                        # 仅要求左 < 右
-values[0] = golden_minimize(..., -0.012, left_hi, ...)
-right_lo = values[0] + 1e-7
-values[1] = golden_minimize(..., right_lo, 0.012, ...)
-```
-- **是否阻塞 200 次测试**：否。当前测试数据均为对称分布，不影响 200 次基准结果。
+**问题**: 当 `values[1]` 精确等于 `-0.012`（基带下边界）时，`left_hi = min(-0.012 - 1e-7, 0.012) = -0.0120000001`。此时 `lo = -0.012 > hi = -0.0120000001`，即 `hi < lo`。golden_minimize 中 `(hi - lo)` 为负，导致黄金分割点计算错误，搜索退化为在区间外评估目标函数并返回无意义的中间值。
+
+**对称问题**: Line 409-410 当 `values[0]` 漂移到 `+0.012` 时同样存在。
+
+**触发条件**: 频率偏移在坐标下降后漂移到基带边界 `+/-0.012 Hz`。
+
+**修复**: 在 golden_minimize 内部或调用前添加 `if hi <= lo: return (lo + hi) / 2.0` 保护。
 
 ---
 
-### P2 - 004 `empirical_limit` 对后续间隔的下降敏感，可能返回 None
+### B3. argmax 在空掩码上返回索引 0
 
-- **文件**：`q3_multisource_separation/experiments.py`
-- **行号**：271-277
-- **严重度**：P2
-- **类型**：正确性 / 边界条件
-- **问题**：`empirical_limit()` 要求从某个间隔 `i` 开始，**所有** 后续更大的间隔的成功率均 ≥ 0.90。若某较大间隔因抽样噪声回落到 90% 以下，函数返回 `None` 而非返回首个达到 90% 的间隔：
+- **文件**: core.py:449
+- **发现角度**: A
 
 ```python
-if row[key] >= 0.90 and all(later[key] >= 0.90 for later in rows[index:]):
-    return float(row["separation_hz"])
-return None
+allowed = np.abs(residual_grid - one_frequency) >= exclusion
+residual_index = int(np.argmax(np.where(allowed, residual_power, -np.inf)))
 ```
 
-- **影响**：
-  - 当前 10 次运行数据中不存在此回落，`equal` 返回 0.005，`unequal` 返回 0.0075。
-  - 200 次运行时，抽样噪声降低，回落的概率减小，但仍有可能因个别间隔的异常低值导致 `None`，需要在报告中人工处理。
-  - 实际物理规律应该是近频辨识成功率随间隔增大单调非减；若出现回落应视为抽样误差，而非经验极限不存在。
-- **复现场景**：`unequal` 振幅条件下，间隔 = 0.005 时 70%（抽样波动），间隔 = 0.0075/0.01 时 100%。`empirical_limit` 在 0.005 处检查 `all(later[0.0075, 0.01]) >= 0.90` 为 True，返回 0.005。但如果后期有一个异常低值（如 0.0075=100%, 0.01=80%），则 0.005 不被接受，0.0075 检索 `all([0.01]>=0.90)` 失败 → `None`。
-- **建议修复**：改为向前搜索（首个到达 0.90 且后续无低于阈值的显著下降，或允许一定容差）：
-```python
-def empirical_limit(summary, case, method="main", threshold=0.90):
-    rows = sorted(..., key=lambda r: r["separation_hz"])
-    key = f"{method}_success_rate"
-    for index, row in enumerate(rows):
-        if row[key] >= threshold:
-            remaining = [later[key] for later in rows[index:]]
-            # 允许后续最多一个间隔低于阈值（排除抽样噪声）
-            below = sum(r < threshold for r in remaining)
-            if below <= 1:
-                return float(row["separation_hz"])
-    return None
-```
-- **是否阻塞 200 次测试**：否。200 次后抽样噪声减小，实际触发概率低，但仍需修复以保证统计稳健。
+**问题**: 当 `exclusion` 覆盖了基带内所有网格点时，`allowed` 全为 `False`，`np.argmax` 在全 `-np.inf` 数组上返回索引 `0`——即基带左边界的一个无意义频率。该频率被当作"第二个峰值"，可能触发虚假二源检测。
+
+**修复**: 在 argmax 后检查 `np.any(allowed)` 或 `residual_power[residual_index] > -np.inf`。
 
 ---
 
-### P2 - 005 `experiments.py` 中 `trial_rng` 使用硬编码种子而非导入 `SEED`
+### B4. GLRT 统计量校正与阈值标定不匹配
 
-- **文件**：`q3_multisource_separation/__init__.py`（第 3 行，引发不一致），`q3_multisource_separation/experiments.py`（第 31 行，问题位置）
-- **严重度**：P2
-- **类型**：可维护性 / 一致性
-- **问题**：`__init__.py` 中定义了包级 `SEED = 20260620`，`cli.py` 中正确导入并使用 `from . import SEED`。但 `experiments.py` 中的 `trial_rng()` 直接硬编码了 `20260620`：
-```python
-def trial_rng(experiment_id: int, replicate: int) -> np.random.Generator:
-    return np.random.default_rng(np.random.SeedSequence([20260620, experiment_id, replicate]))
-```
-同时，`core.py` 中 `GLRTConfig` 的默认 `random_seed=20260620` 也使用硬编码。
-- **影响**：
-  - 若日后需要更换全局种子（如为不同实验日期重新生成独立随机序列），仅修改 `__init__.py` 的 `SEED` 不会传播到 `experiments.py` 和 `core.py` 的随机序列，导致部分随机序列不变、部分改变，破坏可复现性保证。
-- **复现场景**：将 `__init__.py` 的 `SEED` 改为 20260621 后运行 `--resume`，仿真实验使用新的 `SEED`（cli.py 传递），但 `trial_rng` 仍使用旧的 20260620，前后不一致。
-- **建议修复**：使 `trial_rng` 和 `GLRTConfig` 默认值从包级 `SEED` 导入：
-```python
-from . import SEED as PACKAGE_SEED
-def trial_rng(experiment_id, replicate):
-    return np.random.default_rng(np.random.SeedSequence([PACKAGE_SEED, experiment_id, replicate]))
-```
-- **是否阻塞 200 次测试**：否。维护性问题，不影响当前结果。
-
----
-
-### P2 - 006 `_multi_sse` 在每个 golden-section 迭代中重复构建设计矩阵
-
-- **文件**：`q3_multisource_separation/core.py`
-- **行号**：148-152（`_multi_sse`），82-84（`_design_matrix`），182（调用点）
-- **严重度**：P2
-- **类型**：性能
-- **问题**：`refine_joint_frequencies` 内部循环对每个频率的每次 golden-section 求值调用 `_multi_sse`，而 `_multi_sse` 每次都从零构造完整的 `_design_matrix`（包括所有频率的 sin/cos 列 + 截距列）。对于 k 个频率、s 次扫描、m 次 golden-section 迭代，总计 k × s × m 次重复构建设计矩阵。
-
-以 4 频率、4 扫描、28 迭代为例：4 × 4 × 28 ≈ 448 次 `_design_matrix` 调用。每次均为 k 个频率 × 40001 采样点 × 2 列（sin + cos）= 数万次向量运算。
-
-- **影响**：
-  - 当前小规模测试中占总运行时间约 5.8s（analysis_seconds），此部分在 200 次仿真/近频实验中虽不直接叠加（仿真使用 `fast_spaced_detection`，它有类似优化问题），但 `segment_stability`（8 段 × 独立调用）中会重复触发。
-  - 若后续修改频率数或采样点数，此性能问题等比放大。
-- **复现场景**：`segment_stability` 调用 `refine_joint_frequencies`，每段对 4 个频率运行完整坐标下降 ≈ 448 次 lstsq，8 段 ≈ 3584 次。
-- **建议修复**：将 `_multi_sse` 改为接收已构造的部分设计矩阵和待更新频率索引，仅更新被修改频率对应的 sin/cos 列；或预计算所有候选频率的列向量并通过索引查表。
-- **是否阻塞 200 次测试**：否。当前 200 次仿真/近频使用 `fast_spaced_detection`（较小的优化循环），此问题主要影响 `segment_stability` 和后处理分析，不会阻塞 200 次运行。
-
----
-
-### P3 - 007 `close_pair_resolver` 中坐标下降 5 轮 × golden-section 28 迭代过度收敛
-
-- **文件**：`q3_multisource_separation/core.py`
-- **行号**：376/386-388
-- **严重度**：P3
-- **类型**：性能 / 微优化
-- **问题**：`close_pair_resolver` 中 golden-section 迭代次数为 28（坐标下降内）和 35（初始单频搜索）。28 次 golden-section 可达到括号宽度缩小因子 (0.618)²⁸ ≈ 7×10⁻⁷，初始宽度 0.024 Hz 对应终精度约 1.7×10⁻⁸ Hz，远低于物理问题所需的分辨率（FFT 频点间隔 0.0025 Hz 的万分之一）。
-
-同样，`refine_joint_frequencies` 中 28 次 golden-section 也有类似过度收敛问题。
-- **影响**：每轮坐标下降多执行约 30-50% 的 lstsq 调用。五轮坐标下降 × 2 频率 × 10 额外迭代 ≈ 100 次可避免的 lstsq 计算。
-- **复现场景**：每个 `close_pair_resolver` 调用（resolution 实验中运行约 4800 次），每次可节省约 100 次 lstsq。
-- **建议修复**：将核心循环迭代次数从 28 降至 18（精度 ≈ 1.7×10⁻⁵ Hz，仍优于频点间隔），初始搜索从 35 降至 22：
-```python
-golden_minimize(objective, lo, hi, iterations=18)  # 座标下降内
-golden_minimize(objective1, -0.01, 0.01, iterations=22)  # 初始单频
-```
-- **是否阻塞 200 次测试**：否。纯性能优化。
-
----
-
-### P3 - 008 `_match_frequencies` 排序配对在 K 不同时可能配对错误
-
-- **文件**：`q3_multisource_separation/experiments.py`
-- **行号**：38-42
-- **严重度**：P3
-- **类型**：正确性（当前无影响）
-- **问题**：`_match_frequencies` 将估计频率和真实频率各自排序后按索引配对。当长度不等时，`count = min(len(estimated), len(truth))` 截取前 count 个。排序配对的假设是「最小的估计 ↔ 最小的真实」，这在频率分布不均匀时可能产生错误配对。
+- **文件**: core.py:211
+- **发现角度**: I (架构)
 
 ```python
-# 示例：truth=[4.0, 14.0], estimated=[14.0]
-# 排序后 truth=[4.0, 14.0], est=[14.0]
-# count=1, 配对 (14.0, 4.0) → MAE=10.0 Hz
-# 正确配对应为 (14.0, 14.0) → MAE=0.0 Hz
+corrected = statistic * max(len(residual) - fitted_parameter_count, 1) / len(residual)
 ```
-- **影响**：
-  - 当前代码中，当 K 不同时（`correct_k=False`），`frequency_mae` 在 `run_simulation_trial` 第 99 行被覆盖为 NaN。因此 `_match_frequencies` 的排序配对问题仅在 `correct_k=True` 时影响 MAE。
-  - 当 `correct_k=True` 时，两数组长度相同，排序后按索引配对天然正确（假设频率值一一对应且相近，排序后索引自然配对相近频率）。
-  - 因此当前代码中没有实际的错误影响，但函数本身脆弱，未来若在其他场景使用需注意。
-- **复现场景**：在 `correct_k=False` 且未覆盖为 NaN 的场景下（若未来修改代码），产生错误的频率误差统计。
-- **建议修复**：实现基于最小距离的分配（匈牙利算法的一维特化）：
+
+**问题**: 阈值 `cfg.threshold` 通过对**未校正**统计量 Monte Carlo 标定得到（cli.py:170）。但实际比较的是乘以 `(N - k) / N` 的**校正后**统计量。校正因子 `<= 1`，有效检验比名义 `p_fa` 更保守。在 `detect_multitone` 中 `fitted_parameter_count = 3k + 1` 随分量数增长，后期迭代比前期更保守——误报率不均匀。
+
+**影响**: 零假设误报率实验（只做单次 `fitted_parameter_count=1`）测得的误报率不能反映多迭代检测器的真实行为。
+
+**修复**: 阈值标定时使用与检测一致的校正公式。
+
+---
+
+### B5. Workbook 资源泄漏 + 工作表索引越界
+
+- **文件**: core.py:65-68
+- **发现角度**: D (Python陷阱)
+
 ```python
-def _match_frequencies(estimated, truth):
-    from scipy.optimize import linear_sum_assignment  # 或手动实现贪心最近邻
+wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+ws = wb["多故障源"] if "多故障源" in wb.sheetnames else wb.worksheets[1]
+rows = [(row[0], row[1]) for row in ws.iter_rows(min_row=2, values_only=True)]
+wb.close()
 ```
-或至少添加函数注释说明配对约束。
-- **是否阻塞 200 次测试**：否。
+
+**问题**:
+1. 若 `"多故障源"` 不存在且 Workbook 只有 1 个工作表，则 `wb.worksheets[1]` 抛出 `IndexError`，`wb.close()` 不执行，句柄泄漏。
+2. 无 `try/finally` 或 context manager 保护——任何异常都会导致泄漏。
+
+**修复**: 使用 `with` 语句或 `try/finally`；对 `wb.worksheets` 索引做边界检查。
 
 ---
 
-### P3 - 009 `_complex_fit` 与 `multi_harmonic_fit` 结构重复
+### B6. segment_series 条件初始化 — NameError 风险
 
-- **文件**：`q3_multisource_separation/core.py`
-- **行号**：104-145（`multi_harmonic_fit`），350-362（`_complex_fit`）
-- **严重度**：P3
-- **类型**：可维护性
-- **问题**：两函数实现几乎相同的流程：排序频率 → 构建设计矩阵 → lstsq → 计算残差/SSE/BIC → 调用 `design_diagnostics`。`parameter_count` 的推导在两处独立书写（`3k+1` vs `3k+2`），BIC 公式完全一致但需要手动同步。
-- **影响**：若未来修正 BIC 公式、参数计数规则或添加新的诊断指标，须同时修改两处。当前两处已存在细微差异（`multi_harmonic_fit` 额外计算 per-component 的 waveform、振幅、相位），增加了阅读成本。
-- **复现场景**：任何对 BIC 公式或设计矩阵结构的修改，开发者可能遗漏两处中的一处。
-- **建议修复**：抽象出共享的拟合框架 `_generic_fit(t, columns_builder, parameter_count_fn)`，或至少添加注释标注两函数需同步修改的字段。
-- **是否阻塞 200 次测试**：否。
+- **文件**: outputs.py:105-107
+- **发现角度**: A / C / G — 3个独立角度
 
----
+```python
+if component_id == 1:
+    segment_series = []
+segment_series.append(...)  # NameError 若 component_id 不是从 1 开始
+```
 
-### P3 - 010 `when correct_k=False` 时 `frequency_mae` 被覆盖为 NaN
-
-- **文件**：`q3_multisource_separation/experiments.py`
-- **行号**：99
-- **严重度**：P3
-- **类型**：信息损失 / 设计取舍
-- **问题**：第 91 行已计算 `frequency_mae = float(np.mean(np.abs(ef - tf)))` 且信息有效（例如估计对了 3 个中的 2 个频率，平均误差很小）。但第 99 行无条件覆盖为 NaN。虽然有意识的设计决策（限 K 正确时评价频率精度），但丢失了部分正确的信息。
-- **影响**：`summarize_simulation` 中 `mean_frequency_mae_hz_given_correct_k` 在 K 不完全正确时无样本，导致总体报告中的频率误差样本量小于正确 K 样本量，可能低估高频段性能。
-- **复现场景**：-15 dB 时 `correct_k_rate=0.8`（10 次中 8 次正确），2 次不正确 → 频率 MAE 仅 8 个样本。若 K=5 真实、估计=4 但误差极小，这些信息被丢弃。
-- **建议修复**（可选）：增加 `frequency_mae_all` 字段（不限 K 正确性），或至少添加注释说明这一设计取舍。
-- **是否阻塞 200 次测试**：否。设计取舍而非错误。
+**修复**: 在循环前显式初始化 `segment_series = []`。
 
 ---
 
-## Suggested Order
+### B7. condition_series 条件初始化 — NameError 风险
 
-### 1. 必须先修（200 次前）
+- **文件**: outputs.py:129-131
+- **发现角度**: A / G
 
-| 优先级 | ID | 标题 |
-|--------|----|------|
-| P1-001 | `estimated_full_200` 使用硬编码次数 | 虽不影响结果正确性，但 200 次输出的 runtime 估算严重失准时会误导后续优化决策 |
-| P1-002 | `read_csv_rows` 全量读取 CSV | 200 次规模下 I/O 放大效应显著，可能使运行时间不可控 |
+```python
+if case == "equal":
+    condition_series = []
+condition_series.append(...)  # NameError 若 "equal" 不是首迭代
+```
 
-### 2. 可在 200 次后修
-
-| 优先级 | ID | 标题 | 原因 |
-|--------|----|------|------|
-| P2-003 | `close_pair_resolver` 对称约束 | 当前测试数据对称分布，不影响结果 |
-| P2-004 | `empirical_limit` 回落敏感性 | 仅在小样本或极端抽样波动时触发 |
-| P2-005 | 种子硬编码 | 维护性问题，不影响当前结果 |
-| P2-006 | `_multi_sse` 重复构建设计矩阵 | 性能优化，200 次运行前可暂缓 |
-
-### 3. 只记录不修
-
-| 优先级 | ID | 标题 | 原因 |
-|--------|----|------|------|
-| P3-007 | golden-section 过度收敛 | 纯性能微优化，200 次不影响 |
-| P3-008 | `_match_frequencies` 排序配对 | 当前无实际影响 |
-| P3-009 | `_complex_fit` / `multi_harmonic_fit` 重复 | 可维护性，当前无风险 |
-| P3-010 | `correct_k=False` 时 MAE NaN | 设计取舍，非错误 |
+**修复**: 在循环前显式初始化 `condition_series = []`。
 
 ---
 
-## Runtime Notes
+## 🟠 高级别架构问题
 
-- **当前耗时输出是否够用**：基本够用。`q3_runtime.txt` 提供了按阶段的细分（load/analysis/simulation/null/resolution/output）和均值指标。但缺少以下维度：
-  - 三阶段各自的 flush 等待时间（CSV 写入 I/O）未单独计时
-  - `fast_spaced_detection` 内部单次迭代耗时未统计
-  - 图片转换（Chrome headless PNG 渲染）未单独计时，包含在 `output_stage_seconds` 内
-- **是否建议增加 `q3_timing.csv`**：建议增加。结构化 CSV（`stage`, `step`, `seconds`, `n_calls`, `description`）将使后续的耗时变化追踪和性能回归检测变得可自动化，而非依赖 `q3_runtime.txt` 的自由文本。可以在 `P1-002` 修复的同时实现。
-- **预计主要瓶颈**：
-  - 200 次规模下：多源仿真（5 SNR × 200 次 = 1000 次 `fast_spaced_detection`）将是最大耗时阶段，每次 ~400 ms，合计 ~400 s。
-  - 近频实验（2 振幅 × 12 间隔 × 200 次 = 4800 次，每次主模型 + MUSIC ≈ 48 ms）合计 ~230 s。
-  - CSV 全量读取 I/O（P1-002）将额外叠加数十秒至分钟级开销。
-- **CPU 多进程是否值得**：值得。仿真和近频实验是天然"易并行"（embarrassingly parallel）负载，各 replicate 间完全独立。使用 `concurrent.futures.ProcessPoolExecutor` 可在 4-8 核机器上实现 3-6 倍加速。需要注意：
-  - Windows 多进程需在 `__main__` 保护下使用 `spawn` 启动方式
-  - 每 20 次 flush 的 CSV 写入需用锁保护或改为阶段结束时统一写入
-  - 当前基于 dict 的 `--resume` 机制需要支持并发写入（如每个 replica 写入独立文件，最后合并）
-- **CUDA 是否值得**：不值得。当前向量长度（40001 点，设计矩阵 9-15 列）和问题规模（每个 replicate 独立 500 次小矩阵 lstsq + FFT）对 GPU 计算来说太小。数据搬运开销超过计算加速收益。若未来扩展为大规模批处理（10⁴+ 独立的 Monte Carlo replica），或单次 FFT 长度增加到 10⁶+ 点，可重新评估。
+### A1. detect_multitone 不路由到 close_pair_resolver
+
+- **文件**: core.py:278-279
+- **发现角度**: E
+
+注释称 "Close-pair experiments use their dedicated exhaustive split resolver below"，但 `detect_multitone` **从不调用** `close_pair_resolver`。真实数据主分析路径使用坐标下降，近频分辨率实验使用专用的 `close_pair_resolver`。真实数据近频对由更简单的管线处理，分辨率实验的成功率**高估**了主分析对近频的实际分离能力。
+
+**修复**: 在 `detect_multitone` 中检测疑似近频对（间距 < 某阈值）并路由到 `close_pair_resolver`。
+
+---
+
+### A2. 两套平行检测算法
+
+- **文件**: experiments.py:56-78 vs core.py:242-304
+- **发现角度**: C / E / I — 3个独立角度
+
+| 特性 | detect_multitone (真实数据) | fast_spaced_detection (仿真) |
+|---|---|---|
+| 候选生成 | 分裂 + 残差峰，全量评估 | 仅残差峰单点添加 |
+| 精修策略 | 全频联合坐标下降 | 仅精修新增频率 |
+| BIC 阈值 | 参数化 `bic_delta` | 硬编码 `10.0` |
+| 历史记录 | 完整迭代历史 | 无历史 |
+
+仿真验证使用的是**不同**于真实数据管线的算法。对主分析的修改不会自动传播到仿真路径。
+
+**修复**: `fast_spaced_detection` 复用 `detect_multitone` 核心循环，或提取共享逻辑。
+
+---
+
+### A3. close_pair_resolver 混用两个拟合域
+
+- **文件**: core.py:485-486
+- **发现角度**: E / I
+
+```python
+improvement = one["bic"] - two["bic"]          # 复数基带 BIC（降采样）
+accepted = ... and not full_fit["ill_conditioned"]  # 实数全速率条件数
+```
+
+BIC 来自降采样数据复指数拟合，条件数来自原始数据实数正弦拟合。复数 BIC 用 `2*len(z)` 样本，实数 BIC 用 `len(y)`。同一 `10.0` 阈值在两个域含义不同。
+
+**修复**: 统一使用实数域 `multi_harmonic_fit` 的 BIC 和条件数。
+
+---
+
+### A4. _multi_sse / _complex_sse 丢弃 lstsq 秩信息
+
+- **文件**: core.py:151, core.py:383
+- **发现角度**: E
+
+```python
+beta = np.linalg.lstsq(design, y, rcond=1e-12)[0]  # 丢弃 rank
+```
+
+频率接近时设计矩阵近似秩亏。`lstsq` 返回最小范数解，SSE 面在退化方向平坦。golden_minimize 可能收敛到虚假局部极小值。
+
+**修复**: 检查秩；秩亏时添加正则化或提前终止优化。
+
+---
+
+## 🟡 中等级别问题
+
+### M1. 汇总函数中的浮点相等比较
+- **文件**: experiments.py:359, 387
+- `float(row["snr_total_db"]) == snr` 和 `float(row["separation_hz"]) == separation` 用 `==` 比较浮点数。分离值 `0.00025` 等无精确二进制表示。
+- **修复**: 使用 `abs(a - b) < 1e-12` 或按字符串分组。
+
+### M2. CSV 续跑时字段名可能不匹配
+- **文件**: outputs.py:30
+- `DictWriter` fieldnames 由当前批次决定，非已有 header。代码版本间 dict 键顺序不同导致值写入错误列。
+- **修复**: 追加模式下从已有 CSV header 读取字段名。
+
+### M3. 硬编码 BIC 阈值在 fast_spaced_detection 中不同步
+- **文件**: experiments.py:75
+- **修复**: 将 `bic_delta` 作为参数传入 `fast_spaced_detection`。
+
+### M4. 四个实验阶段代码复制粘贴
+- **文件**: cli.py:229-277
+- Simulation/null/resolution/extreme 四阶段相同 ~13 行结构。已有轻微漂移（null 去重键是裸 int，其他是 tuple）。
+- **修复**: 提取为参数化循环。
+
+### M5. _run_tasks 混合执行、进度和 I/O
+- **文件**: cli.py:82-106
+- 一个函数管 (a) 任务调度 (b) 进度打印 (c) CSV 写入。`output_path` 为 Optional 时结果静默丢弃。
+- **修复**: 分离 CSV 写入到调用方。
+
+### M6. Worker 函数在全局变量未初始化时可被调用
+- **文件**: cli.py:95-98
+- `workers <= 1` 时不调用 `_init_worker`。非 `main()` 上下文调用将传递 `None` 给 NumPy。
+- **修复**: 添加 assert 或在单进程路径中也初始化。
+
+---
+
+## 🔵 低级别建议
+
+### L1. Q1/Q2/Q3 SEED 常量分散
+- Q3: `SEED = 20260620`，Q2: `SEED = 20260619`，Q1: `random_seed: int = 20260619`
+- **修复**: 项目根级别统一随机种子。
+
+### L2. GLRT 统计量/阈值与 Q1 重复
+- `q1_compatible_glrt_stat` 和 `q1_compatible_glrt_threshold` 与 Q1 函数算法等价。
+- **修复**: 直接导入 Q1 函数，在校正步骤做增量包装。
+
+### L3. BIC 公式三处重复
+- `n * log(max(sse/n, 1e-300)) + k * log(n)` 出现在 core.py:133, core.py:376 和 Q2 `joint_segment_fit`
+- **修复**: 提取共享 `compute_bic(n, sse, k)` 函数。
+
+### L4. pool.map 全量内存驻留
+- cli.py:104 — 所有结果 dict 驻留内存直到全部完成。崩溃丢失所有。
+- **修复**: 改用 `pool.imap_unordered`。
+
+### L5. close_pair_resolver 和 music_close_pair 串行执行
+- experiments.py:152-156 — 无数据依赖但串行调用。
+- **修复**: worker 内线程池并行执行。
+
+---
+
+## 修复优先级建议
+
+| 优先级 | 缺陷 | 理由 |
+|---|---|---|
+| **P0** | B1 (MUSIC tb[1]) | 所有 MUSIC 结果系统性偏倚，近频对比数据失真 |
+| **P0** | B2 (golden 边界退化) | 极端工况近频可触发崩溃/错误收敛 |
+| **P1** | B4 (GLRT 阈值不匹配) | 统计校准基础受损，顺序检测误报率不均 |
+| **P1** | B3 (argmax 空掩码) | 虚假二源检测，窄带场景触发 |
+| **P1** | B5 (Workbook 泄漏) | 数据加载崩溃，阻塞所有后续 |
+| **P1** | B6/B7 (NameError) | 代码脆弱性，数据变更即崩溃 |
+| **P2** | A1/A2 (双路径分离) | 仿真验证不代表真实管线 |
+| **P2** | A3 (混用拟合域) | 近频接受准则内在矛盾 |
+| **P2** | A4 (丢弃 lstsq 秩) | 近秩亏时优化可能错解 |
+| **P3** | M1-M6 | 健壮性/可维护性 |
+| **P4** | L1-L5 | 效率/代码去重 |
+
+---
+
+*报告由 9 角度并行审查自动合成，经去重和交叉验证后生成。Phase 3 sweep 因 API 余额不足未完成。*

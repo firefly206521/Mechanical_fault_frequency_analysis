@@ -19,7 +19,6 @@ from . import SEED
 from q2_harmonic_recovery.core import (
     analytic_signal,
     golden_minimize,
-    linear_detrend,
     wrap_phase,
 )
 
@@ -64,13 +63,30 @@ def q1_compatible_glrt_threshold(n: int, fs: float, cfg: GLRTConfig) -> float:
 
 def load_multi_source(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb["多故障源"] if "多故障源" in wb.sheetnames else wb.worksheets[1]
-    rows = [(row[0], row[1]) for row in ws.iter_rows(min_row=2, values_only=True)]
-    wb.close()
+    try:
+        if "多故障源" in wb.sheetnames:
+            ws = wb["多故障源"]
+        elif len(wb.worksheets) >= 2:
+            ws = wb.worksheets[1]
+        else:
+            raise ValueError("data.xlsx中找不到“多故障源”工作表，且不存在第二个工作表。")
+        rows = [(row[0], row[1]) for row in ws.iter_rows(min_row=2, values_only=True)]
+    finally:
+        wb.close()
+    if not rows:
+        raise ValueError("“多故障源”工作表没有数据行。")
     data = np.asarray(rows, dtype=float)
+    if data.ndim != 2 or data.shape[1] < 2 or not np.all(np.isfinite(data[:, :2])):
+        raise ValueError("“多故障源”工作表前两列必须是有限数值t和x(t)。")
     t, x = data[:, 0], data[:, 1]
+    if len(t) < 3 or np.any(np.diff(t) <= 0):
+        raise ValueError("时间列必须严格递增且至少包含3个样本。")
     fs = float(1.0 / np.median(np.diff(t)))
     return t, x, fs
+
+
+def compute_bic(n: int, sse: float, parameter_count: int) -> float:
+    return float(n * math.log(max(sse / n, 1e-300)) + parameter_count * math.log(n))
 
 
 def _design_matrix(t: np.ndarray, frequencies: Iterable[float]) -> tuple[np.ndarray, float]:
@@ -131,7 +147,7 @@ def multi_harmonic_fit(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float
     k = len(frequencies)
     parameter_count = 3 * k + 1
     sse = float(np.dot(residual, residual))
-    bic = float(n * math.log(max(sse / n, 1e-300)) + parameter_count * math.log(n))
+    bic = compute_bic(n, sse, parameter_count)
     return {
         "frequencies_hz": frequencies,
         "components": components,
@@ -149,7 +165,9 @@ def multi_harmonic_fit(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float
 
 def _multi_sse(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float]) -> float:
     design, _ = _design_matrix(t, frequencies)
-    beta = np.linalg.lstsq(design, y, rcond=1e-12)[0]
+    beta, _, rank, _ = np.linalg.lstsq(design, y, rcond=1e-12)
+    if rank < design.shape[1]:
+        return float("inf")
     residual = y - design @ beta
     return float(np.dot(residual, residual))
 
@@ -168,6 +186,12 @@ def refine_joint_frequencies(
     base_bounds = [(max(0.001, f - w), f + w) for f, w in zip(seeds, widths)]
     frequencies = seeds.copy()
     previous = frequencies.copy()
+    tc = t - float(np.mean(t))
+    columns: list[np.ndarray] = []
+    for frequency in frequencies:
+        angle = 2.0 * np.pi * frequency * tc
+        columns.extend([np.sin(angle), np.cos(angle)])
+    offset_column = np.ones_like(t)
     sweeps = min(4, max(2, maxiter // 8))
     for _ in range(sweeps):
         for index in range(len(frequencies)):
@@ -179,10 +203,20 @@ def refine_joint_frequencies(
             if hi <= lo:
                 continue
             def objective(value: float) -> float:
-                candidate = frequencies.copy()
-                candidate[index] = value
-                return _multi_sse(t, y, candidate)
-            frequencies[index] = golden_minimize(objective, lo, hi, iterations=28)
+                angle = 2.0 * np.pi * value * tc
+                candidate_columns = columns.copy()
+                candidate_columns[2 * index] = np.sin(angle)
+                candidate_columns[2 * index + 1] = np.cos(angle)
+                design = np.column_stack([*candidate_columns, offset_column])
+                beta, _, rank, _ = np.linalg.lstsq(design, y, rcond=1e-12)
+                if rank < design.shape[1]:
+                    return float("inf")
+                residual = y - design @ beta
+                return float(np.dot(residual, residual))
+            frequencies[index] = golden_minimize(objective, lo, hi, iterations=18)
+            angle = 2.0 * np.pi * frequencies[index] * tc
+            columns[2 * index] = np.sin(angle)
+            columns[2 * index + 1] = np.cos(angle)
         if np.max(np.abs(frequencies - previous)) < 1e-9:
             break
         previous = frequencies.copy()
@@ -195,7 +229,10 @@ def refine_joint_frequencies(
 def glrt_scan(residual: np.ndarray, fs: float, cfg: GLRTConfig, fitted_parameter_count: int) -> dict:
     frequencies, statistic = q1_compatible_glrt_stat(residual, fs)
     mask = (frequencies >= cfg.f_min) & (frequencies <= cfg.f_max)
-    corrected = statistic * max(len(residual) - fitted_parameter_count, 1) / len(residual)
+    # Q1's Monte Carlo threshold is calibrated on this unscaled statistic.
+    # Keeping the same scale makes every sequential iteration comparable to
+    # the cached threshold; fitted_parameter_count remains metadata only.
+    corrected = statistic
     indexes = np.where(mask)[0]
     local = indexes[(corrected[indexes] >= np.roll(corrected, 1)[indexes]) & (corrected[indexes] > np.roll(corrected, -1)[indexes])]
     if len(local) == 0:
@@ -217,12 +254,15 @@ def _candidate_seed_sets(current: np.ndarray, new_peak: float, duration: float) 
     candidates: list[tuple[str, np.ndarray]] = []
     if len(current) == 0 or np.min(np.abs(current - new_peak)) > 1e-7:
         candidates.append(("residual_peak", np.sort(np.r_[current, new_peak])))
-    for index, center in enumerate(current):
-        for multiplier in SPLIT_MULTIPLIERS:
-            separation = float(multiplier / duration)
-            pair = np.asarray([center - separation / 2.0, center + separation / 2.0])
-            seed = np.sort(np.r_[np.delete(current, index), pair])
-            candidates.append((f"split_{multiplier:.2f}_over_T", seed))
+    if len(current) and np.min(np.abs(current - new_peak)) < 0.02:
+        for index, center in enumerate(current):
+            if abs(center - new_peak) >= 0.02:
+                continue
+            for multiplier in SPLIT_MULTIPLIERS:
+                separation = float(multiplier / duration)
+                pair = np.asarray([center - separation / 2.0, center + separation / 2.0])
+                seed = np.sort(np.r_[np.delete(current, index), pair])
+                candidates.append((f"split_{multiplier:.2f}_over_T", seed))
     return candidates
 
 
@@ -253,6 +293,15 @@ def detect_multitone(
             history.append(record)
             break
         seed_sets = _candidate_seed_sets(current["frequencies_hz"], scan["peak_frequency_hz"], duration)
+        if len(current["frequencies_hz"]):
+            nearest_index = int(np.argmin(np.abs(current["frequencies_hz"] - scan["peak_frequency_hz"])))
+            nearest = float(current["frequencies_hz"][nearest_index])
+            if abs(nearest - scan["peak_frequency_hz"]) < 0.02:
+                local_center = 0.5 * (nearest + scan["peak_frequency_hz"])
+                local = close_pair_resolver(t, y, center_hz=local_center)
+                if local["estimated_k"] == 2:
+                    local_seed = np.sort(np.r_[np.delete(current["frequencies_hz"], nearest_index), local["frequencies_hz"]])
+                    seed_sets.append(("local_close_pair_resolver", local_seed))
         quick = []
         for origin, seeds in seed_sets:
             if len(seeds) > max_components or np.min(seeds) <= cfg.f_min or np.max(seeds) >= cfg.f_max:
@@ -261,12 +310,29 @@ def detect_multitone(
             quick.append((trial["bic"], origin, seeds))
         quick.sort(key=lambda item: item[0])
         refined = []
-        # Quick BIC screening is cheap; only the best seed receives the costly
-        # full joint refinement. Close-pair experiments use their dedicated
-        # exhaustive split resolver below.
+        # Quick BIC screening is cheap; only the best seed is refined. A new
+        # well-separated residual peak needs one-dimensional refinement only;
+        # close-pair candidates receive the full joint refinement.
         for _, origin, seeds in quick[:1]:
-            widths = np.full(len(seeds), max(3.0 / duration, 0.003))
-            trial = refine_joint_frequencies(t, y, seeds, widths)
+            is_wide_residual_peak = origin == "residual_peak" and (
+                len(current["frequencies_hz"]) == 0
+                or np.min(np.abs(current["frequencies_hz"] - scan["peak_frequency_hz"])) >= 0.02
+            )
+            if is_wide_residual_peak:
+                candidate = seeds.copy()
+                new_index = int(np.argmin(np.abs(candidate - scan["peak_frequency_hz"])))
+                lo = max(cfg.f_min, candidate[new_index] - max(3.0 / duration, 0.003))
+                hi = min(cfg.f_max, candidate[new_index] + max(3.0 / duration, 0.003))
+                candidate[new_index] = golden_minimize(
+                    lambda value: _multi_sse(t, y, np.sort(np.r_[candidate[:new_index], value, candidate[new_index + 1:]])),
+                    lo,
+                    hi,
+                    iterations=20,
+                )
+                trial = multi_harmonic_fit(t, y, np.sort(candidate))
+            else:
+                widths = np.full(len(seeds), max(3.0 / duration, 0.003))
+                trial = refine_joint_frequencies(t, y, seeds, widths)
             refined.append((trial["bic"], origin, trial))
         if not refined:
             record.update({"accepted": False, "stop_reason": "no valid candidate"})
@@ -360,39 +426,126 @@ def _complex_fit(t: np.ndarray, z: np.ndarray, offsets: Iterable[float]) -> dict
     n_real = 2 * len(z)
     parameter_count = 3 * len(offsets) + 2
     sse = float(np.sum(np.abs(residual) ** 2))
-    bic = float(n_real * math.log(max(sse / n_real, 1e-300)) + parameter_count * math.log(n_real))
+    bic = compute_bic(n_real, sse, parameter_count)
     return {"offsets": offsets, "beta": beta, "residual": residual, "sse": sse, "bic": bic, "rank": int(rank), **diag}
 
 
 def _complex_sse(t: np.ndarray, z: np.ndarray, offsets: Iterable[float]) -> float:
     offsets = np.asarray(list(offsets), dtype=float)
     design = np.column_stack([*[np.exp(1j * 2.0 * np.pi * offset * t) for offset in offsets], np.ones_like(t, dtype=complex)])
-    beta = np.linalg.lstsq(design, z, rcond=1e-12)[0]
+    beta, _, rank, _ = np.linalg.lstsq(design, z, rcond=1e-12)
+    if rank < design.shape[1]:
+        return float("inf")
     residual = z - design @ beta
     return float(np.sum(np.abs(residual) ** 2))
 
 
-def close_pair_resolver(t: np.ndarray, x: np.ndarray, center_hz: float = 13.5) -> dict:
-    tb, z, fsb = baseband_series(t, x, center_hz)
-    objective1 = lambda value: _complex_sse(tb, z, [float(value)])
-    one_frequency = golden_minimize(objective1, -0.01, 0.01, iterations=35)
-    one = _complex_fit(tb, z, [one_frequency])
-    duration = float(t[-1] - t[0])
-    seeds = [np.asarray([-m / (2 * duration), m / (2 * duration)]) for m in SPLIT_MULTIPLIERS]
-    quick = sorted((_complex_fit(tb, z, seed)["bic"], seed) for seed in seeds)
-    best_seed = quick[0][1]
+def _baseband_periodogram(z: np.ndarray, fs: float, step_hz: float, limit_hz: float = 0.012) -> tuple[np.ndarray, np.ndarray]:
+    """Fine local periodogram computed by zero-padded complex FFT."""
+    nfft = max(len(z), int(math.ceil(fs / step_hz)))
+    centered = z - np.mean(z)
+    frequencies = np.fft.fftfreq(nfft, 1.0 / fs)
+    power = np.abs(np.fft.fft(centered, n=nfft)) ** 2
+    mask = np.abs(frequencies) <= limit_hz
+    order = np.argsort(frequencies[mask])
+    return frequencies[mask][order], power[mask][order]
 
-    values = best_seed.copy()
-    for _ in range(5):
-        left_hi = values[1] - 1e-7
-        values[0] = golden_minimize(lambda value: _complex_sse(tb, z, [value, values[1]]), -0.012, left_hi, iterations=28)
-        right_lo = values[0] + 1e-7
-        values[1] = golden_minimize(lambda value: _complex_sse(tb, z, [values[0], value]), right_lo, 0.012, iterations=28)
-    two = _complex_fit(tb, z, np.sort(values))
+
+def _refine_complex_pair(t: np.ndarray, z: np.ndarray, seed: np.ndarray, rounds: int = 3) -> dict:
+    values = np.sort(np.asarray(seed, dtype=float))
+    for _ in range(rounds):
+        left_hi = min(values[1] - 1e-7, 0.012)
+        if left_hi > -0.012:
+            values[0] = golden_minimize(
+                lambda value: _complex_sse(t, z, [value, values[1]]),
+                -0.012,
+                left_hi,
+                iterations=18,
+            )
+        right_lo = max(values[0] + 1e-7, -0.012)
+        if right_lo < 0.012:
+            values[1] = golden_minimize(
+                lambda value: _complex_sse(t, z, [values[0], value]),
+                right_lo,
+                0.012,
+                iterations=18,
+            )
+    return _complex_fit(t, z, values)
+
+
+def close_pair_resolver(
+    t: np.ndarray,
+    x: np.ndarray,
+    center_hz: float = 13.5,
+    local_grid_step_hz: float = 0.000025,
+) -> dict:
+    """Resolve a local two-tone cluster using peel, rescan, and joint refit.
+
+    The center only defines the heterodyne passband. Candidate frequencies are
+    estimated independently and are not constrained to be symmetric around it.
+    """
+    tb, z, fsb = baseband_series(t, x, center_hz)
+    grid, original_power = _baseband_periodogram(z, fsb, local_grid_step_hz)
+    coarse_one = float(grid[int(np.argmax(original_power))])
+    refine_width = max(4.0 * local_grid_step_hz, 0.0002)
+    objective1 = lambda value: _complex_sse(tb, z, [float(value)])
+    one_frequency = golden_minimize(
+        objective1,
+        max(-0.012, coarse_one - refine_width),
+        min(0.012, coarse_one + refine_width),
+        iterations=22,
+    )
+    one = _complex_fit(tb, z, [one_frequency])
+
+    # Strong-component peeling exposes a weak asymmetric neighbour. The final
+    # answer is still obtained from a joint two-tone fit, avoiding error
+    # propagation from sequential subtraction.
+    residual_grid, residual_power = _baseband_periodogram(one["residual"], fsb, local_grid_step_hz)
+    exclusion = max(4.0 * local_grid_step_hz, 0.00015)
+    allowed = np.abs(residual_grid - one_frequency) >= exclusion
+    if np.any(allowed):
+        residual_index = int(np.argmax(np.where(allowed, residual_power, -np.inf)))
+        residual_frequency = float(residual_grid[residual_index])
+        residual_peak_ratio = float(residual_power[residual_index] / max(np.median(residual_power[allowed]), 1e-30))
+    else:
+        residual_frequency = float(one_frequency)
+        residual_peak_ratio = 0.0
+
+    duration = float(t[-1] - t[0])
+    candidates: list[tuple[str, np.ndarray]] = [("peel_residual_rescan", np.sort([one_frequency, residual_frequency]))]
+    for multiplier in SPLIT_MULTIPLIERS:
+        separation = float(multiplier / duration)
+        candidates.append((f"adaptive_split_{multiplier:.2f}_over_T", np.asarray([
+            one_frequency - separation / 2.0,
+            one_frequency + separation / 2.0,
+        ])))
+
+    # Add pairs formed by the strongest distinct local spectral maxima.
+    maxima = np.where((original_power[1:-1] > original_power[:-2]) & (original_power[1:-1] >= original_power[2:]))[0] + 1
+    maxima = maxima[np.argsort(original_power[maxima])[::-1]]
+    local_peaks: list[float] = []
+    for index in maxima:
+        value = float(grid[index])
+        if all(abs(value - existing) >= exclusion for existing in local_peaks):
+            local_peaks.append(value)
+        if len(local_peaks) >= 3:
+            break
+    for value in local_peaks:
+        if abs(value - one_frequency) >= exclusion:
+            candidates.append(("fine_grid_secondary_peak", np.sort([one_frequency, value])))
+
+    valid = [(origin, np.sort(seed)) for origin, seed in candidates if seed[0] >= -0.012 and seed[1] <= 0.012 and seed[1] - seed[0] >= 1e-7]
+    quick = sorted((_complex_fit(tb, z, seed)["bic"], origin, seed) for origin, seed in valid)
+    refined = []
+    for _, origin, seed in quick[:3]:
+        trial = _refine_complex_pair(tb, z, seed)
+        refined.append((trial["bic"], origin, trial))
+    _, candidate_origin, two = min(refined, key=lambda item: item[0])
     frequencies = center_hz + two["offsets"]
+    one_full = multi_harmonic_fit(t, x, [center_hz + one["offsets"][0]])
     full_fit = multi_harmonic_fit(t, x, frequencies)
-    improvement = one["bic"] - two["bic"]
-    accepted = bool(improvement >= 10.0 and not full_fit["ill_conditioned"])
+    improvement = one_full["bic"] - full_fit["bic"]
+    accepted = bool(improvement >= 10.0 and residual_peak_ratio >= 10.0 and not full_fit["ill_conditioned"])
     return {
         "estimated_k": 2 if accepted else 1,
         "frequencies_hz": frequencies if accepted else np.asarray([center_hz + one["offsets"][0]]),
@@ -406,6 +559,9 @@ def close_pair_resolver(t: np.ndarray, x: np.ndarray, center_hz: float = 13.5) -
         "column_count": full_fit["column_count"],
         "ill_conditioned": full_fit["ill_conditioned"],
         "baseband_fs_hz": fsb,
+        "candidate_origin": candidate_origin,
+        "residual_peak_ratio": residual_peak_ratio,
+        "local_grid_step_hz": local_grid_step_hz,
     }
 
 
@@ -416,7 +572,7 @@ def music_close_pair(
     grid_step_hz: float = 0.000025,
     order: int = 80,
 ) -> dict:
-    tb, z, _ = baseband_series(t, x, center_hz)
+    tb, z, fsb = baseband_series(t, x, center_hz)
     order = min(order, len(z) // 2)
     trajectory = np.lib.stride_tricks.sliding_window_view(z, order).T
     snapshots = trajectory.shape[1]
@@ -434,7 +590,7 @@ def music_close_pair(
     if estimated_k < 1:
         return {"estimated_k": 0, "frequencies_hz": np.asarray([]), "grid_step_hz": grid_step_hz, "mdl": mdl}
     signal_space = eigenvectors[:, -estimated_k:]
-    steering = np.exp(1j * 2.0 * np.pi * np.arange(order)[:, None] * tb[1] * grid[None, :])
+    steering = np.exp(1j * 2.0 * np.pi * np.arange(order)[:, None] * (1.0 / fsb) * grid[None, :])
     denominator = order - np.sum(np.abs(signal_space.conj().T @ steering) ** 2, axis=0)
     pseudo = 1.0 / np.maximum(denominator.real, 1e-15)
     peaks = np.where((pseudo[1:-1] > pseudo[:-2]) & (pseudo[1:-1] >= pseudo[2:]))[0] + 1

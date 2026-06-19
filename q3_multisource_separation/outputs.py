@@ -26,8 +26,19 @@ def append_csv_rows(path: Path, rows: list[dict]) -> None:
     if not rows:
         return
     exists = path.exists() and path.stat().st_size > 0
+    fieldnames = list(rows[0].keys())
+    if exists:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            existing_header = next(csv.reader(handle), None)
+        if not existing_header:
+            raise ValueError(f"Existing CSV has no header: {path}")
+        if set(existing_header) != set(fieldnames):
+            missing = sorted(set(existing_header) - set(fieldnames))
+            extra = sorted(set(fieldnames) - set(existing_header))
+            raise ValueError(f"CSV schema mismatch for {path.name}; missing={missing}, extra={extra}")
+        fieldnames = existing_header
     with path.open("a", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="raise")
         if not exists:
             writer.writeheader()
         writer.writerows(rows)
@@ -99,11 +110,10 @@ def write_plots(
             ("BIC改善", np.arange(1, len(accepted) + 1), [row["bic_improvement"] for row in accepted], "#d62728"),
         ])
 
+    segment_series = []
     for component_id in sorted({int(row["component_id"]) for row in segment_rows}):
         rows = [row for row in segment_rows if int(row["component_id"]) == component_id]
         centers = [(float(row["start_s"]) + float(row["end_s"])) / 2.0 for row in rows]
-        if component_id == 1:
-            segment_series = []
         segment_series.append((f"分量{component_id}", centers, [abs(float(row["frequency_deviation_hz"])) for row in rows], colors[(component_id - 1) % len(colors)]))
     if segment_rows:
         line_svg(output_dir / "q3_segment_frequency_stability.svg", "Q3 50 s分段频率稳定性", "时间 (s)", "频率绝对偏差 (Hz)", segment_series)
@@ -119,6 +129,7 @@ def write_plots(
 
     if resolution_summary:
         resolution_series = []
+        condition_series = []
         for case, color in [("equal", "#1f77b4"), ("unequal", "#d62728")]:
             rows = [row for row in resolution_summary if row["amplitude_case"] == case]
             resolution_series.append((f"主模型-{case}", [row["separation_hz"] for row in rows], [row["main_success_rate"] for row in rows], color))
@@ -126,8 +137,6 @@ def write_plots(
         line_svg(output_dir / "q3_resolution_probability.svg", "Q3 近频辨识概率", "频率间隔 (Hz)", "成功率", resolution_series)
         for case, color in [("equal", "#1f77b4"), ("unequal", "#d62728")]:
             rows = [row for row in resolution_summary if row["amplitude_case"] == case]
-            if case == "equal":
-                condition_series = []
             condition_series.append((case, [row["separation_hz"] for row in rows], [row["median_condition_design"] for row in rows], color))
         line_svg(output_dir / "q3_condition_vs_separation.svg", "Q3 设计矩阵条件数与频率间隔", "频率间隔 (Hz)", "条件数（对数）", condition_series, log_y=True)
 
@@ -150,6 +159,8 @@ def write_report(path: Path, context: dict) -> None:
         "本文将第一问的GLRT扩展为多峰顺序检测，并将第二问的谐波回归扩展为多频联合拟合。每加入一个候选分量，程序重新联合估计全部频率、振幅和相位；只有GLRT通过门限且BIC至少降低10时才保留该分量。",
         "",
         "联合最小二乘使用SVD，不显式计算正规方程的逆。程序同时记录设计矩阵条件数；条件数超过 $10^6$ 或数值秩不足时，不把结果认定为可靠分离。",
+        "",
+        "对于疑似近频簇，程序先用细网格定位最强分量，再剥离该分量并扫描残差中的弱峰；候选频率最后回到二源联合非线性拟合，并由BIC和残差峰显著性共同决定是否拆峰。该流程不要求两个频率关于预设中心对称。",
         "",
         "## 2. 真实数据分离结果",
         "",

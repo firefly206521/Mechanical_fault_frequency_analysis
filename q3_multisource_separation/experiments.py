@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
 
 import numpy as np
 
 from . import SEED
 from .core import (
     GLRTConfig,
-    golden_minimize,
     close_pair_resolver,
+    detect_multitone,
     glrt_scan,
-    _multi_sse,
     multi_harmonic_fit,
     music_close_pair,
 )
@@ -54,29 +52,17 @@ def _match_frequencies(estimated: np.ndarray, truth: np.ndarray) -> tuple[np.nda
     return estimated[:count], truth[:count]
 
 
-def fast_spaced_detection(t: np.ndarray, x: np.ndarray, fs: float, cfg: GLRTConfig, max_components: int = 10) -> dict:
-    current = multi_harmonic_fit(t, x, [])
-    for _ in range(max_components):
-        scan = glrt_scan(current["residual"], fs, cfg, current["parameter_count"])
-        if not scan["detected"]:
-            break
-        coarse = scan["peak_frequency_hz"]
-        if len(current["frequencies_hz"]) and np.min(np.abs(current["frequencies_hz"] - coarse)) < 0.002:
-            break
-        seeds = np.sort(np.r_[current["frequencies_hz"], coarse])
-        index = int(np.argmin(np.abs(seeds - coarse)))
-
-        def objective(value: float) -> float:
-            candidate = seeds.copy()
-            candidate[index] = value
-            return _multi_sse(t, x, np.sort(candidate))
-
-        seeds[index] = golden_minimize(objective, max(cfg.f_min, coarse - 0.006), min(cfg.f_max, coarse + 0.006), iterations=30)
-        candidate = multi_harmonic_fit(t, x, np.sort(seeds))
-        if current["bic"] - candidate["bic"] < 10.0 or candidate["ill_conditioned"]:
-            break
-        current = candidate
-    return current
+def fast_spaced_detection(
+    t: np.ndarray,
+    x: np.ndarray,
+    fs: float,
+    cfg: GLRTConfig,
+    max_components: int = 10,
+    bic_delta: float = 10.0,
+) -> dict:
+    """Compatibility wrapper around the same detector used for real data."""
+    fit, _ = detect_multitone(t, x, fs, cfg, max_components=max_components, bic_delta=bic_delta)
+    return fit
 
 
 def run_simulation_trial(
@@ -89,7 +75,6 @@ def run_simulation_trial(
 ) -> dict:
     truth_f = np.asarray(truth_fit["frequencies_hz"], float)
     truth_a = np.asarray([row["amplitude"] for row in truth_fit["components"]], float)
-    truth_phi = np.asarray([row["phase_origin_rad"] for row in truth_fit["components"]], float)
     total_power = float(np.sum(truth_a ** 2 / 2.0))
     noise_std = math.sqrt(total_power / (10.0 ** (snr_db / 10.0)))
     rng = trial_rng(1000 + int(round(snr_db * 10)), replicate)
@@ -151,7 +136,7 @@ def run_resolution_trial(
     observed = signal + rng.normal(0.0, noise_std, len(t))
 
     started = time.perf_counter()
-    main = close_pair_resolver(t, observed)
+    main = close_pair_resolver(t, observed, local_grid_step_hz=music_grid_step)
     main_seconds = time.perf_counter() - started
     started = time.perf_counter()
     music = music_close_pair(t, observed, grid_step_hz=music_grid_step)
@@ -177,6 +162,9 @@ def run_resolution_trial(
         "main_max_frequency_error_hz": main_error,
         "main_success": main_success,
         "main_bic_improvement": main["bic_improvement"],
+        "main_candidate_origin": main.get("candidate_origin", ""),
+        "main_residual_peak_ratio": main.get("residual_peak_ratio", float("nan")),
+        "main_local_grid_step_hz": main.get("local_grid_step_hz", music_grid_step),
         "condition_design": main["condition_design"],
         "condition_normal": main["condition_normal"],
         "smallest_singular_value": main["smallest_singular_value"],
@@ -338,6 +326,8 @@ def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: floa
         "runtime_seconds": elapsed,
         "true_frequencies_hz": ";".join(f"{value:.9g}" for value in frequencies),
         "estimated_frequencies_hz": ";".join(f"{value:.9g}" for value in estimated_f),
+        "candidate_origin": estimate.get("candidate_origin", ""),
+        "residual_peak_ratio": estimate.get("residual_peak_ratio", float("nan")),
     }
 
 
@@ -354,7 +344,7 @@ def wilson_interval(successes: int, runs: int, z: float = 1.96) -> tuple[float, 
 def summarize_simulation(rows: list[dict]) -> list[dict]:
     output = []
     for snr in SNR_LEVELS:
-        group = [row for row in rows if float(row["snr_total_db"]) == snr]
+        group = [row for row in rows if np.isclose(float(row["snr_total_db"]), snr, rtol=0.0, atol=1e-12)]
         if not group:
             continue
         correct = sum(str(row["correct_k"]).lower() == "true" for row in group)
@@ -381,7 +371,7 @@ def summarize_resolution(rows: list[dict]) -> list[dict]:
     output = []
     for case in AMPLITUDE_CASES:
         for separation in SEPARATIONS:
-            group = [row for row in rows if row["amplitude_case"] == case and float(row["separation_hz"]) == separation]
+            group = [row for row in rows if row["amplitude_case"] == case and np.isclose(float(row["separation_hz"]), separation, rtol=0.0, atol=1e-12)]
             if not group:
                 continue
             main_count = sum(str(row["main_success"]).lower() == "true" for row in group)

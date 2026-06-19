@@ -61,33 +61,44 @@ def _init_worker(t, fs, fit, cfg, noise_std, music_step) -> None:
 
 
 def _simulation_worker(task: tuple[float, int]) -> dict:
+    assert _WORKER_T is not None and _WORKER_FS is not None and _WORKER_FIT is not None and _WORKER_CFG is not None, "worker state is not initialized"
     snr, replicate = task
     return run_simulation_trial(_WORKER_T, _WORKER_FS, _WORKER_FIT, snr, replicate, _WORKER_CFG)
 
 
 def _null_worker(replicate: int) -> dict:
+    assert _WORKER_T is not None and _WORKER_FS is not None and _WORKER_NOISE_STD is not None and _WORKER_CFG is not None, "worker state is not initialized"
     return run_null_trial(_WORKER_T, _WORKER_FS, _WORKER_NOISE_STD, replicate, _WORKER_CFG)
 
 
 def _resolution_worker(task: tuple[str, float, int]) -> dict:
+    assert _WORKER_T is not None and _WORKER_NOISE_STD is not None and _WORKER_MUSIC_STEP is not None, "worker state is not initialized"
     case, separation, replicate = task
     return run_resolution_trial(_WORKER_T, _WORKER_NOISE_STD, separation, case, replicate, _WORKER_MUSIC_STEP)
 
 
 def _extreme_worker(task: tuple[str, int]) -> dict:
+    assert _WORKER_T is not None and _WORKER_FS is not None and _WORKER_FIT is not None and _WORKER_NOISE_STD is not None and _WORKER_CFG is not None, "worker state is not initialized"
     case_name, replicate = task
     return run_extreme_trial(_WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_NOISE_STD, case_name, replicate, _WORKER_CFG)
 
 
-def _run_tasks(label: str, tasks: list, worker, workers: int, started: float) -> list[dict]:
+def _run_tasks(label: str, tasks: list, worker, workers: int, started: float, output_path: Path) -> list[dict]:
     if not tasks:
         return []
     rows = []
+    pending_write = []
+    def record(row: dict, count: int) -> None:
+        rows.append(row)
+        pending_write.append(row)
+        if len(pending_write) >= 20 or count == len(tasks):
+            append_csv_rows(output_path, pending_write)
+            pending_write.clear()
+        if count % 20 == 0 or count == len(tasks):
+            _progress(label, count, len(tasks), started)
     if workers <= 1:
         for count, task in enumerate(tasks, 1):
-            rows.append(worker(task))
-            if count % 20 == 0 or count == len(tasks):
-                _progress(label, count, len(tasks), started)
+            record(worker(task), count)
         return rows
     with ProcessPoolExecutor(
         max_workers=workers,
@@ -95,15 +106,8 @@ def _run_tasks(label: str, tasks: list, worker, workers: int, started: float) ->
         initargs=(_WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_CFG, _WORKER_NOISE_STD, _WORKER_MUSIC_STEP),
     ) as pool:
         for count, row in enumerate(pool.map(worker, tasks), 1):
-            rows.append(row)
-            if count % 20 == 0 or count == len(tasks):
-                _progress(label, count, len(tasks), started)
+            record(row, count)
     return rows
-
-
-def _append_in_chunks(path: Path, rows: list[dict], chunk_size: int = 20) -> None:
-    for index in range(0, len(rows), chunk_size):
-        append_csv_rows(path, rows[index:index + chunk_size])
 
 
 def locate_data(workspace: Path, explicit: Path | None) -> Path:
@@ -148,6 +152,13 @@ def _progress(label: str, completed: int, target: int, started: float) -> None:
 def main() -> None:
     global _WORKER_T, _WORKER_FS, _WORKER_FIT, _WORKER_CFG, _WORKER_NOISE_STD, _WORKER_MUSIC_STEP
     args = parse_args()
+    for name in ("simulation_runs", "resolution_runs", "null_runs", "extreme_runs", "glrt_mc"):
+        if getattr(args, name) < 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be non-negative")
+    if args.max_components < 1:
+        raise ValueError("--max-components must be at least 1")
+    if not 0.0 < args.music_local_grid_step <= 0.001:
+        raise ValueError("--music-local-grid-step must be in (0, 0.001] Hz")
     workers = max(1, args.workers)
     package_dir = Path(__file__).resolve().parent
     workspace = package_dir.parent
@@ -234,9 +245,9 @@ def main() -> None:
         for snr in SNR_LEVELS:
             pending = [rep for rep in range(args.simulation_runs) if (snr, rep) not in existing]
             tasks.extend((snr, replicate) for replicate in pending)
-        new_rows = _run_tasks("多源仿真", tasks, _simulation_worker, workers, simulation_stage_started)
-        _append_in_chunks(simulation_path, new_rows)
+        new_rows = _run_tasks("多源仿真", tasks, _simulation_worker, workers, simulation_stage_started, simulation_path)
         simulation_rows.extend(new_rows)
+    simulation_new_count = len(new_rows) if not args.skip_simulation else 0
     simulation_stage_seconds = time.perf_counter() - simulation_stage_started
 
     null_stage_started = time.perf_counter()
@@ -244,9 +255,9 @@ def main() -> None:
     if not args.skip_null:
         existing = {int(row["replicate"]) for row in null_rows}
         pending = [rep for rep in range(args.null_runs) if rep not in existing]
-        new_rows = _run_tasks("纯噪声误报实验", pending, _null_worker, workers, null_stage_started)
-        _append_in_chunks(null_path, new_rows)
+        new_rows = _run_tasks("纯噪声误报实验", pending, _null_worker, workers, null_stage_started, null_path)
         null_rows.extend(new_rows)
+    null_new_count = len(new_rows) if not args.skip_null else 0
     null_stage_seconds = time.perf_counter() - null_stage_started
 
     resolution_stage_started = time.perf_counter()
@@ -258,9 +269,9 @@ def main() -> None:
             for separation in SEPARATIONS:
                 pending = [rep for rep in range(args.resolution_runs) if (case, separation, rep) not in existing]
                 tasks.extend((case, separation, replicate) for replicate in pending)
-        new_rows = _run_tasks("近频实验", tasks, _resolution_worker, workers, resolution_stage_started)
-        _append_in_chunks(resolution_path, new_rows)
+        new_rows = _run_tasks("近频实验", tasks, _resolution_worker, workers, resolution_stage_started, resolution_path)
         resolution_rows.extend(new_rows)
+    resolution_new_count = len(new_rows) if not args.skip_resolution else 0
     resolution_stage_seconds = time.perf_counter() - resolution_stage_started
 
     extreme_stage_started = time.perf_counter()
@@ -271,9 +282,9 @@ def main() -> None:
         for case_name in EXTREME_CASES:
             pending = [rep for rep in range(args.extreme_runs) if (case_name, rep) not in existing]
             tasks.extend((case_name, replicate) for replicate in pending)
-        new_rows = _run_tasks("极端情况实验", tasks, _extreme_worker, workers, extreme_stage_started)
-        _append_in_chunks(extreme_path, new_rows)
+        new_rows = _run_tasks("极端情况实验", tasks, _extreme_worker, workers, extreme_stage_started, extreme_path)
         extreme_rows.extend(new_rows)
+    extreme_new_count = len(new_rows) if not args.skip_extreme else 0
     extreme_stage_seconds = time.perf_counter() - extreme_stage_started
 
     simulation_summary = summarize_simulation(simulation_rows)
@@ -309,19 +320,22 @@ def main() -> None:
     mean_main_resolution = float(np.mean([float(row["main_runtime_seconds"]) for row in resolution_rows])) if resolution_rows else float("nan")
     mean_music_resolution = float(np.mean([float(row["music_runtime_seconds"]) for row in resolution_rows])) if resolution_rows else float("nan")
     mean_null_trial = float(np.mean([float(row["runtime_seconds"]) for row in null_rows])) if null_rows else float("nan")
+    mean_extreme_trial = float(np.mean([float(row["runtime_seconds"]) for row in extreme_rows])) if extreme_rows else float("nan")
     target_simulation_rows = len(SNR_LEVELS) * args.simulation_runs
     target_resolution_rows = len(AMPLITUDE_CASES) * len(SEPARATIONS) * args.resolution_runs
     target_null_rows = args.null_runs
     target_extreme_rows = len(EXTREME_CASES) * args.extreme_runs
+    def projected_stage(wall_seconds: float, new_count: int, mean_trial: float, target_count: int) -> float:
+        if new_count >= max(20, workers * 2):
+            return wall_seconds * target_count / new_count
+        if np.isfinite(mean_trial):
+            return mean_trial * target_count / workers
+        return 0.0
     estimated_full = load_seconds + actual_analysis_seconds + output_stage_seconds
-    if simulation_rows:
-        estimated_full += simulation_stage_seconds * target_simulation_rows / len(simulation_rows)
-    if resolution_rows:
-        estimated_full += resolution_stage_seconds * target_resolution_rows / len(resolution_rows)
-    if null_rows:
-        estimated_full += null_stage_seconds * target_null_rows / len(null_rows)
-    if extreme_rows:
-        estimated_full += extreme_stage_seconds * target_extreme_rows / len(extreme_rows)
+    estimated_full += projected_stage(simulation_stage_seconds, simulation_new_count, mean_simulation_trial, target_simulation_rows)
+    estimated_full += projected_stage(resolution_stage_seconds, resolution_new_count, mean_main_resolution + mean_music_resolution, target_resolution_rows)
+    estimated_full += projected_stage(null_stage_seconds, null_new_count, mean_null_trial, target_null_rows)
+    estimated_full += projected_stage(extreme_stage_seconds, extreme_new_count, mean_extreme_trial, target_extreme_rows)
     runtime_lines = [
         f"simulation_target_runs={args.simulation_runs}",
         f"resolution_target_runs={args.resolution_runs}",
@@ -346,11 +360,26 @@ def main() -> None:
         f"mean_main_resolution_trial_seconds={mean_main_resolution}",
         f"mean_music_resolution_trial_seconds={mean_music_resolution}",
         f"mean_null_trial_seconds={mean_null_trial}",
+        f"mean_extreme_trial_seconds={mean_extreme_trial}",
         f"estimated_full_seconds={estimated_full}",
         f"total_seconds={total_seconds:.6f}",
         f"png_count={len(png)}",
     ]
     (output_dir / "q3_runtime.txt").write_text("\n".join(runtime_lines) + "\n", encoding="utf-8")
+    timing_rows = [
+        {"stage": "load", "step": "read_and_detrend", "seconds": load_seconds, "n_calls": 1, "seconds_per_call": load_seconds, "description": "读取Excel并线性去趋势"},
+        {"stage": "actual", "step": "detect_fit_segment", "seconds": actual_analysis_seconds, "n_calls": 1, "seconds_per_call": actual_analysis_seconds, "description": "真实数据GLRT、联合拟合和分段稳定性"},
+        {"stage": "simulation", "step": "parallel_stage_wall", "seconds": simulation_stage_seconds, "n_calls": simulation_new_count, "seconds_per_call": simulation_stage_seconds / max(simulation_new_count, 1), "description": "本次新增多源Monte Carlo的阶段墙钟时间"},
+        {"stage": "simulation", "step": "trial_cpu_mean", "seconds": mean_simulation_trial, "n_calls": len(simulation_rows), "seconds_per_call": mean_simulation_trial, "description": "全部已完成多源试验的内部平均耗时"},
+        {"stage": "null", "step": "parallel_stage_wall", "seconds": null_stage_seconds, "n_calls": null_new_count, "seconds_per_call": null_stage_seconds / max(null_new_count, 1), "description": "本次新增纯噪声试验的阶段墙钟时间"},
+        {"stage": "resolution", "step": "parallel_stage_wall", "seconds": resolution_stage_seconds, "n_calls": resolution_new_count, "seconds_per_call": resolution_stage_seconds / max(resolution_new_count, 1), "description": "本次新增近频试验的阶段墙钟时间"},
+        {"stage": "resolution", "step": "main_trial_cpu_mean", "seconds": mean_main_resolution, "n_calls": len(resolution_rows), "seconds_per_call": mean_main_resolution, "description": "全部已完成近频主模型的平均耗时"},
+        {"stage": "resolution", "step": "music_trial_cpu_mean", "seconds": mean_music_resolution, "n_calls": len(resolution_rows), "seconds_per_call": mean_music_resolution, "description": "全部已完成MUSIC的平均耗时"},
+        {"stage": "extreme", "step": "parallel_stage_wall", "seconds": extreme_stage_seconds, "n_calls": extreme_new_count, "seconds_per_call": extreme_stage_seconds / max(extreme_new_count, 1), "description": "本次新增极端工况的阶段墙钟时间"},
+        {"stage": "output", "step": "csv_png_report", "seconds": output_stage_seconds, "n_calls": len(png), "seconds_per_call": output_stage_seconds / max(len(png), 1), "description": "汇总表、PNG和Markdown报告"},
+        {"stage": "total", "step": "workflow", "seconds": total_seconds, "n_calls": 1, "seconds_per_call": total_seconds, "description": "完整工作流墙钟时间"},
+    ]
+    write_csv(output_dir / "q3_timing.csv", timing_rows)
     print(f"Q3 output: {output_dir}")
     print(f"Detected K={len(components)}: {[round(row['frequency_hz'], 9) for row in components]}")
     print(f"Total runtime: {total_seconds:.1f} s; PNG plots: {len(png)}")
