@@ -1,5 +1,0 @@
-﻿scenario,description,best_layout,best_score,best_low_snr_pd_source,best_mean_p_fa
-balanced,敏感度和噪声相对均衡,bearing_left+gearbox_left+gearbox_right,0.5490741219008265,0.5852272727272727,0.03380952380952381
-spatial_noise_skew,齿轮箱右侧和输入轴侧噪声明显偏大,bearing_left+gearbox_left+output_shaft,0.5785357265840221,0.6247159090909091,0.035238095238095235
-weak_single_sensor,部分测点安装耦合差或局部失敏,bearing_left+bearing_right+gearbox_left,0.5338442665289257,0.5849431818181818,0.039285714285714285
-source_shadow,部分故障源到若干测点传播衰减更强,bearing_left+gearbox_left+gearbox_right,0.5429278581267217,0.5650568181818182,0.03380952380952381

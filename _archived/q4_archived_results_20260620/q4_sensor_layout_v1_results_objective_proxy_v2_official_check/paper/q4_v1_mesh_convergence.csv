@@ -1,2 +1,0 @@
-﻿profile,grid_size,candidate_count,prescreen_count,greedy_layout,greedy_objective,swap_layout,swap_objective,exhaustive_best_layout,exhaustive_best_objective,greedy_swap_gap_to_exhaustive,exhaustive_combo_count
-official,160,160,40,v1_p074+v1_p141+v1_p014,9.42509028277602e-05,v1_p074+v1_p141+v1_p014,9.42509028277602e-05,v1_p105+v1_p074+v1_p140,0.00010037285181029918,0.06099207975189579,9880

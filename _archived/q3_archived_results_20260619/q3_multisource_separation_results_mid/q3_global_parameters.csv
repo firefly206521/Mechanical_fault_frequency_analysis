@@ -1,2 +1,0 @@
-﻿data_path,sample_count,sampling_rate_hz,duration_s,estimated_k,residual_std,explained_variance,total_snr_db,condition_design,condition_normal,numerical_rank,column_count,ill_conditioned,random_seed,p_fa_total,p_fa_step,bic_acceptance_delta,linear_trend_slope,linear_trend_intercept
-E:\AIworkspace\2026CSU-math\testA\data.xlsx,40001,100.00000000009095,400.0,4,0.09987985926721701,0.11915162017100878,-8.687932713767177,1.0001498323481384,1.0002996871460093,9,9,False,20260620,0.05,0.005,10.0,4.622924057092556e-07,-0.0003382025299250298
