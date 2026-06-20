@@ -38,3 +38,6 @@ AGENTS.md
 # 系统文件
 Thumbs.db
 .DS_Store
+
+#归档文件
+_archived/
