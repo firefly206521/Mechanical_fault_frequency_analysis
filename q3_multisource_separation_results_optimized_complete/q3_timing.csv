@@ -1,0 +1,12 @@
+﻿stage,step,seconds,n_calls,seconds_per_call,description
+load,read_and_detrend,0.2991419000318274,1,0.2991419000318274,读取Excel并线性去趋势
+actual,detect_fit_segment,1.2068436000263318,1,1.2068436000263318,真实数据GLRT、联合拟合和分段稳定性
+simulation,parallel_stage_wall,0.010585700045339763,0,0.010585700045339763,本次新增多源Monte Carlo的阶段墙钟时间
+simulation,trial_cpu_mean,1.1254036467698796,2600,1.1254036467698796,全部已完成多源试验的内部平均耗时
+null,parallel_stage_wall,0.0011576999677345157,0,0.0011576999677345157,本次新增纯噪声试验的阶段墙钟时间
+resolution,parallel_stage_wall,0.03200290002860129,0,0.03200290002860129,本次新增近频试验的阶段墙钟时间
+resolution,main_trial_cpu_mean,0.48294534166670927,4800,0.48294534166670927,全部已完成近频主模型的平均耗时
+resolution,music_trial_cpu_mean,0.029401135958093315,4800,0.029401135958093315,全部已完成MUSIC的平均耗时
+extreme,parallel_stage_wall,0.0028937000315636396,0,0.0028937000315636396,本次新增极端工况的阶段墙钟时间
+output,csv_png_report,4.622226699953899,9,0.5135807444393221,汇总表、PNG和Markdown报告
+total,workflow,9.246662299963646,1,9.246662299963646,完整工作流墙钟时间
