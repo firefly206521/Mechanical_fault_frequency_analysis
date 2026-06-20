@@ -48,6 +48,9 @@ class Q4V1Config:
     eig_regularization: float = 1e-8
     similarity_floor: float = 1e-12
     swap_max_iter_factor: int = 3
+    response_gain_jitter: float = 0.0
+    response_phase_jitter: float = 0.0
+    noise_correlation: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -381,16 +384,35 @@ def noise_stds_for_snr(points: list[CandidatePoint], snr_db: float) -> np.ndarra
     return base_sigma * noise_vector(points)
 
 
+def generate_noise(noise_stds: np.ndarray, sample_count: int, rng: np.random.Generator, correlation: float = 0.0) -> np.ndarray:
+    if not 0.0 <= correlation < 1.0:
+        raise ValueError("noise correlation must be in [0, 1)")
+    independent = rng.normal(0.0, noise_stds[:, None], (len(noise_stds), sample_count))
+    if correlation == 0.0 or len(noise_stds) == 1:
+        return independent
+    shared = rng.normal(0.0, 1.0, sample_count)
+    return math.sqrt(1.0 - correlation) * independent + math.sqrt(correlation) * noise_stds[:, None] * shared[None, :]
+
+
+def perturb_responses(responses: np.ndarray, rng: np.random.Generator, cfg: Q4V1Config) -> np.ndarray:
+    if cfg.response_gain_jitter == 0.0 and cfg.response_phase_jitter == 0.0:
+        return responses
+    gain = np.exp(rng.normal(0.0, cfg.response_gain_jitter, responses.shape))
+    phase = rng.normal(0.0, cfg.response_phase_jitter, responses.shape)
+    return responses * gain * np.exp(1j * phase)
+
+
 def synthesize_layout_samples(
     points: list[CandidatePoint],
     layout: tuple[int, ...],
     t: np.ndarray,
     snr_db: float,
     rng: np.random.Generator,
+    cfg: Q4V1Config,
 ) -> tuple[np.ndarray, np.ndarray]:
     noise_stds_all = noise_stds_for_snr(points, snr_db)
     noise_stds = noise_stds_all[list(layout)]
-    responses = response_matrix(points)[list(layout), :]
+    responses = perturb_responses(response_matrix(points)[list(layout), :], rng, cfg)
     phases = rng.uniform(-np.pi, np.pi, len(DEFAULT_FREQUENCIES))
     samples = np.zeros((len(layout), len(t)), dtype=float)
     for sensor_index in range(len(layout)):
@@ -399,7 +421,7 @@ def synthesize_layout_samples(
             samples[sensor_index] += DEFAULT_AMPLITUDES[fault_index] * abs(response) * np.sin(
                 2.0 * np.pi * frequency * t + phases[fault_index] + np.angle(response)
             )
-        samples[sensor_index] += rng.normal(0.0, noise_stds[sensor_index], len(t))
+    samples += generate_noise(noise_stds, len(t), rng, cfg.noise_correlation)
     return samples, noise_stds
 
 
@@ -425,7 +447,7 @@ def calibrated_threshold(layout_key: tuple[int, ...], noise_key: tuple[float, ..
     rng = trial_rng(9100 + len(layout_key), sum(layout_key), cfg.random_seed)
     maxima = np.empty(cfg.threshold_mc, dtype=float)
     for index in range(cfg.threshold_mc):
-        noise = rng.normal(0.0, noise_stds[:, None], (len(layout_key), len(t)))
+        noise = generate_noise(noise_stds, len(t), rng, cfg.noise_correlation)
         stats = projection_statistics(noise, sin_basis, cos_basis, noise_stds)
         maxima[index] = float(np.max(fused_statistics(stats, noise_stds)))
     return float(np.quantile(maxima, 1.0 - cfg.p_fa, method="higher"))

@@ -18,6 +18,12 @@ Run medium:
 python -m q4_adaptive_sensor_layout.run_q4_v1 --profile medium
 ```
 
+Run a robustness diagnostic with response perturbation and correlated sensor noise:
+
+```powershell
+python -m q4_adaptive_sensor_layout.run_q4_v1 --profile medium --output-dir q4_sensor_layout_v1_results_robustness_medium --response-gain-jitter 0.15 --response-phase-jitter 0.20 --noise-correlation 0.30
+```
+
 Default output directory:
 
 ```text
@@ -26,6 +32,7 @@ q4_sensor_layout_v1_results/
 |- paper/
 |  |- q4_v1_adaptive_report.md
 |  |- q4_v1_selected_regions.csv
+|  |- q4_v1_validated_layouts.csv
 |  |- q4_v1_mesh_convergence.csv
 |  |- q4_v1_robust_detection.csv
 |  |- q4_v1_pd_snr_curve.png

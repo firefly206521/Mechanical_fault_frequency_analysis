@@ -20,6 +20,7 @@ from .core import (
     evaluate_layout,
     exhaustive_layouts,
     fused_statistics,
+    generate_noise,
     generate_candidate_points,
     greedy_layout,
     layout_name,
@@ -107,7 +108,7 @@ def _run_detection_trials(points, layout, layout_label: str, snr_levels: tuple[f
         threshold = calibrated_threshold(tuple(layout), tuple(np.round(noise_stds, 12)), cfg)
         for replicate in range(runs):
             rng = trial_rng(3000 + int(round(10 * snr_db)) + sum(layout), replicate, cfg.random_seed)
-            samples, trial_noise = synthesize_layout_samples(points, tuple(layout), t, snr_db, rng)
+            samples, trial_noise = synthesize_layout_samples(points, tuple(layout), t, snr_db, rng, cfg)
             stats = projection_statistics(samples, sin_basis, cos_basis, trial_noise)
             fused = fused_statistics(stats, trial_noise)
             detected = fused >= threshold
@@ -128,7 +129,7 @@ def _run_detection_trials(points, layout, layout_label: str, snr_levels: tuple[f
             })
         for replicate in range(false_alarm_runs):
             rng = trial_rng(8100 + int(round(10 * snr_db)) + sum(layout), replicate, cfg.random_seed)
-            noise = rng.normal(0.0, noise_stds[:, None], (len(layout), len(t)))
+            noise = generate_noise(noise_stds, len(t), rng, cfg.noise_correlation)
             stats = projection_statistics(noise, sin_basis, cos_basis, noise_stds)
             fused = fused_statistics(stats, noise_stds)
             rows.append({
@@ -176,6 +177,36 @@ def summarize_detection(rows: list[dict]) -> list[dict]:
     return summary
 
 
+def summarize_validated_layouts(detection_summary: list[dict], target_p_fa: float) -> list[dict]:
+    grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    for row in detection_summary:
+        grouped[(row["layout"], row["regions"], row["benchmark"])].append(row)
+    rows = []
+    for (layout, regions, benchmark), group in grouped.items():
+        mean_pd = float(np.mean([float(row["pd_source_mean"]) for row in group]))
+        low_snr_pd = float(np.mean([float(row["pd_source_mean"]) for row in group if float(row["snr_db"]) <= -12.0]))
+        min_pd = float(np.mean([float(row["pd_source_min"]) for row in group]))
+        mean_p_fa = float(np.mean([float(row["p_fa"]) for row in group]))
+        false_alarm_excess = max(0.0, mean_p_fa - target_p_fa)
+        score = 0.45 * mean_pd + 0.35 * low_snr_pd + 0.20 * min_pd - 2.0 * false_alarm_excess
+        rows.append({
+            "layout": layout,
+            "regions": regions,
+            "benchmark": benchmark,
+            "validation_score": score,
+            "mean_pd_source": mean_pd,
+            "low_snr_pd_source": low_snr_pd,
+            "mean_min_pd_source": min_pd,
+            "mean_p_fa": mean_p_fa,
+            "false_alarm_excess": false_alarm_excess,
+        })
+    rows.sort(key=lambda row: row["validation_score"], reverse=True)
+    for rank, row in enumerate(rows, 1):
+        row["validation_rank"] = rank
+        row["validated_role"] = "v1_validated_best" if rank == 1 else "v1_validated_candidate"
+    return rows
+
+
 def run_experiments(
     cfg: Q4V1Config,
     grid_size: int,
@@ -212,6 +243,15 @@ def run_experiments(
         trial_rows.extend(_run_detection_trials(points, evaluation.layout, label, snr_levels, runs, false_alarm_runs, cfg))
 
     detection_summary = summarize_detection(trial_rows)
+    validated_layout_rows = summarize_validated_layouts(detection_summary, cfg.p_fa)
+    validation_by_layout = {row["layout"]: row for row in validated_layout_rows}
+    layout_rows = _layout_rows(points, selected_evals, benchmark_map)
+    for row in layout_rows:
+        validation = validation_by_layout.get(row["layout"])
+        if validation:
+            row["validation_rank"] = validation["validation_rank"]
+            row["validation_score"] = validation["validation_score"]
+            row["validated_role"] = validation["validated_role"]
     mesh_rows = [{
         "profile": profile,
         "grid_size": grid_size,
@@ -238,7 +278,8 @@ def run_experiments(
         "points": points,
         "candidate_rows": _candidate_rows(points),
         "prescreen_rows": prescreen_rows,
-        "selected_layout_rows": _layout_rows(points, selected_evals, benchmark_map),
+        "selected_layout_rows": layout_rows,
+        "validated_layout_rows": validated_layout_rows,
         "mesh_rows": mesh_rows,
         "detection_summary": detection_summary,
         "trial_rows": trial_rows,

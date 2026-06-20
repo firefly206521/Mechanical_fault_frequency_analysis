@@ -8,6 +8,7 @@ from q4_adaptive_sensor_layout.core import (
     evaluate_layout,
     exhaustive_layouts,
     generate_candidate_points,
+    generate_noise,
     greedy_layout,
     prescreen_points,
     response_similarity,
@@ -60,3 +61,17 @@ def test_response_similarity_zero_vectors_are_not_forced_redundant():
     a = np.zeros(4, dtype=complex)
     b = np.zeros(4, dtype=complex)
     assert response_similarity(a, b) == 0.0
+
+
+def test_generate_noise_supports_correlated_sensor_noise():
+    rng = np.random.default_rng(123)
+    noise = generate_noise(np.asarray([1.0, 2.0, 3.0]), 2000, rng, correlation=0.5)
+    assert noise.shape == (3, 2000)
+    corr = np.corrcoef(noise)[0, 1]
+    assert corr > 0.25
+
+
+def test_generate_noise_rejects_invalid_correlation():
+    rng = np.random.default_rng(123)
+    with pytest.raises(ValueError, match="noise correlation"):
+        generate_noise(np.asarray([1.0, 2.0]), 10, rng, correlation=1.0)

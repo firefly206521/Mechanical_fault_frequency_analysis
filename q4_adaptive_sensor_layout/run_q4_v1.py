@@ -28,6 +28,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-trace-info", type=float, default=0.002)
     parser.add_argument("--weight-min-eigen", type=float, default=0.002)
     parser.add_argument("--weight-redundancy", type=float, default=-0.03)
+    parser.add_argument("--response-gain-jitter", type=float, default=0.0)
+    parser.add_argument("--response-phase-jitter", type=float, default=0.0)
+    parser.add_argument("--noise-correlation", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -52,6 +55,12 @@ def main() -> None:
         raise ValueError("--threshold-mc must be positive")
     if not args.snr_levels:
         raise ValueError("--snr-levels must contain at least one value")
+    if args.response_gain_jitter < 0.0:
+        raise ValueError("--response-gain-jitter must be non-negative")
+    if args.response_phase_jitter < 0.0:
+        raise ValueError("--response-phase-jitter must be non-negative")
+    if not 0.0 <= args.noise_correlation < 1.0:
+        raise ValueError("--noise-correlation must be in [0, 1)")
     cfg = Q4V1Config(
         fs=args.fs,
         duration_s=duration_s,
@@ -62,6 +71,9 @@ def main() -> None:
         weight_trace_info=args.weight_trace_info,
         weight_min_eigen=args.weight_min_eigen,
         weight_redundancy=args.weight_redundancy,
+        response_gain_jitter=args.response_gain_jitter,
+        response_phase_jitter=args.response_phase_jitter,
+        noise_correlation=args.noise_correlation,
     )
     context = run_experiments(
         cfg=cfg,
