@@ -1,0 +1,23 @@
+profile=pc2
+
+[2026-06-20 00:49:25] START baseline_repeat_seed20260620
+C:\Users\Aupassen\AppData\Local\Python\pythoncore-3.14-64\python.exe -m q4_sensor_layout.run_q4 --output-dir q4_sensor_layout_results_overnight\pc2\baseline_repeat_seed20260620 --runs 260 --false-alarm-runs 700 --threshold-mc 800 --duration-s 40 --seed 20260620 --snr-levels -25 -20 -15 -12 -10 -5
+[2026-06-20 00:49:25] END baseline_repeat_seed20260620 returncode=1
+profile=pc2
+
+[2026-06-20 00:49:32] START baseline_repeat_seed20260620
+C:\Users\Aupassen\AppData\Local\Python\pythoncore-3.14-64\python.exe -m q4_sensor_layout.run_q4 --output-dir q4_sensor_layout_results_overnight\pc2\baseline_repeat_seed20260620 --runs 260 --false-alarm-runs 700 --threshold-mc 800 --duration-s 40 --seed 20260620 --snr-levels -25 -20 -15 -12 -10 -5
+[2026-06-20 00:49:32] END baseline_repeat_seed20260620 returncode=1
+profile=pc2
+
+[2026-06-20 00:55:29] START baseline_repeat_seed20260620
+C:\Users\Aupassen\AppData\Local\Python\pythoncore-3.14-64\python.exe -m q4_sensor_layout.run_q4 --output-dir q4_sensor_layout_results_overnight\pc2\baseline_repeat_seed20260620 --runs 260 --false-alarm-runs 700 --threshold-mc 800 --duration-s 40 --seed 20260620 --snr-levels -25 -20 -15 -12 -10 -5
+[2026-06-20 01:08:02] END baseline_repeat_seed20260620 returncode=0
+
+[2026-06-20 01:08:02] START long_window_seed20260622
+C:\Users\Aupassen\AppData\Local\Python\pythoncore-3.14-64\python.exe -m q4_sensor_layout.run_q4 --output-dir q4_sensor_layout_results_overnight\pc2\long_window_seed20260622 --runs 180 --false-alarm-runs 600 --threshold-mc 800 --duration-s 80 --seed 20260622 --snr-levels -25 -20 -15 -12 -10 -5
+[2026-06-20 01:28:36] END long_window_seed20260622 returncode=0
+
+[2026-06-20 01:28:36] START score_sensitivity_seed20260624
+C:\Users\Aupassen\AppData\Local\Python\pythoncore-3.14-64\python.exe -m q4_sensor_layout.run_q4 --output-dir q4_sensor_layout_results_overnight\pc2\score_sensitivity_seed20260624 --runs 220 --false-alarm-runs 700 --threshold-mc 800 --duration-s 40 --seed 20260624 --lambda-pfa 3.5 --mu-balance 1.2 --snr-levels -25 -20 -15 -12 -10 -5
+[2026-06-20 01:39:54] END score_sensitivity_seed20260624 returncode=0

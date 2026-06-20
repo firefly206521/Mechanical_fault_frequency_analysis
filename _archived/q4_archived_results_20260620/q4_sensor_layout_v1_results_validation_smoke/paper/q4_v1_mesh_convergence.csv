@@ -1,0 +1,2 @@
+﻿profile,grid_size,candidate_count,prescreen_count,greedy_layout,greedy_objective,swap_layout,swap_objective,exhaustive_best_layout,exhaustive_best_objective,greedy_swap_gap_to_exhaustive,exhaustive_combo_count
+smoke,36,36,20,v1_p026+v1_p015+v1_p018,8.040702000065797e-05,v1_p018+v1_p021+v1_p026,0.00011075116702454109,v1_p026+v1_p021+v1_p018,0.00011075116702454109,0.0,1140

@@ -1,0 +1,22 @@
+Q4 V1 runtime and parameters
+profile=official
+runtime_seconds=108.689895
+grid_size=160
+top_layouts=10
+runs=800
+false_alarm_runs=1600
+snr_levels=-25.0,-20.0,-15.0,-12.0,-10.0,-5.0
+fs=100.0
+duration_s=40.0
+p_fa=0.05
+threshold_mc=800
+random_seed=20260620
+redundancy_limit=0.97
+prescreen_max=40
+weight_mean_lambda=0.1
+weight_trace_info=0.002
+weight_min_eigen=0.002
+weight_redundancy=-0.03
+eig_regularization=1e-08
+similarity_floor=1e-12
+swap_max_iter_factor=3

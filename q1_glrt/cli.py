@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--p-fa", type=float, default=0.05)
     parser.add_argument("--f-min", type=float, default=0.05)
     parser.add_argument("--f-max", type=float, default=49.5)
-    parser.add_argument("--sim-mc", type=int, default=80)
+    parser.add_argument("--sim-mc", type=int, default=200)
     parser.add_argument("--segment-seconds", type=float, default=50.0)
     return parser.parse_args()
 

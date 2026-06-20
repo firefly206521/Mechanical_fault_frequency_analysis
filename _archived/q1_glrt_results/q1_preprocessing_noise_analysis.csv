@@ -1,0 +1,15 @@
+﻿metric,value,note
+sample_count,40001.0,number of samples
+sampling_rate_hz,100.00000000009095,from Excel time column
+duration_s,400.0,observation length
+raw_mean,4.467021990674166e-05,before preprocessing
+raw_std,0.10306275348304482,before preprocessing
+preprocessed_mean,-1.7763124315894607e-19,after linear detrend
+preprocessed_std,0.10306271599985244,after linear detrend
+residual_mean,-7.837978604388495e-18,after removing fitted 2 Hz sinusoid
+residual_std,0.10001364028429421,noise estimate
+residual_skewness,-0.010043298463297112,near 0 supports symmetric noise
+residual_excess_kurtosis,-0.008894682778441076,near 0 supports Gaussian-like noise
+fitted_signal_rms,0.024883632900966103,RMS of extracted sinusoid
+estimated_noise_rms,0.10001364028429421,RMS of residual
+estimated_snr_db,-12.082908984603623,10log10(signal_power/residual_power)
