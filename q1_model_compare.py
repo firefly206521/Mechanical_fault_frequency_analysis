@@ -407,7 +407,7 @@ def run_synthetic_evaluation(fs: float, n: int, cfg: Config) -> pd.DataFrame:
     f0 = 2.0
     amplitude = 0.035
     rows = []
-    eval_n = min(n, 12000)
+    eval_n = n
     # Use a smaller MC threshold in repeated simulation to keep runtime practical.
     sim_cfg = Config(**{**cfg.__dict__, "glrt_mc": max(60, min(cfg.glrt_mc, 100))})
     false_alarm_rate: dict[str, float] = {}

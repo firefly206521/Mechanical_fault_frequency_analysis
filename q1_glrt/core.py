@@ -219,7 +219,7 @@ def run_fft_glrt_simulation(
 ) -> pd.DataFrame:
     rng = np.random.default_rng(cfg.random_seed + 99)
     snr_values = [-25.0, -22.0, -20.0, -18.0, -15.0, -12.0, -10.0, -5.0]
-    sim_n = min(n, 12000)
+    sim_n = n
     sim_cfg = Config(**{**cfg.__dict__, "glrt_mc": max(120, min(cfg.glrt_mc, 300))})
     rows = []
     tolerance = 0.05
