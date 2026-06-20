@@ -14,8 +14,10 @@ from .core import (
     SENSOR_NAMES,
     Q4Config,
     all_layouts,
+    basis_matrices,
     base_sensitivity_matrix,
     default_scenarios,
+    default_time_axis,
     evaluate_detection_trial,
     evaluate_false_alarm_trial,
     score_layout,
@@ -31,6 +33,10 @@ def _mean_bool(rows: list[dict], key: str) -> float:
     return float(np.mean([bool(row[key]) for row in rows]))
 
 
+def _fault_detection_rates(rows: list[dict]) -> list[float]:
+    return [_mean_bool(rows, f"fault_{index + 1}_detected") for index in range(len(FAULT_LABELS))]
+
+
 def summarize_rows(rows: list[dict], false_rows: list[dict], cfg: Q4Config) -> tuple[list[dict], list[dict], list[dict]]:
     grouped: dict[tuple[str, float], list[dict]] = defaultdict(list)
     false_grouped: dict[tuple[str, float], list[dict]] = defaultdict(list)
@@ -42,7 +48,8 @@ def summarize_rows(rows: list[dict], false_rows: list[dict], cfg: Q4Config) -> t
     snr_summary = []
     for (layout, snr_db), group in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1])):
         fgroup = false_grouped.get((layout, snr_db), [])
-        fault_rates = [_mean_bool(group, f"fault_{index + 1}_detected") for index in range(len(FAULT_LABELS))]
+        fault_rates = _fault_detection_rates(group)
+        p_fa = _mean_bool(fgroup, "false_alarm") if fgroup else float("nan")
         snr_summary.append({
             "layout": layout,
             "sensor_count": int(group[0]["sensor_count"]),
@@ -54,8 +61,8 @@ def summarize_rows(rows: list[dict], false_rows: list[dict], cfg: Q4Config) -> t
             "pd_source_min": float(np.min(fault_rates)),
             "pd_source_variance": float(np.var(fault_rates)),
             "false_alarm_runs": len(fgroup),
-            "p_fa": _mean_bool(fgroup, "false_alarm") if fgroup else float("nan"),
-            "score": score_layout(float(np.mean(fault_rates)), _mean_bool(fgroup, "false_alarm") if fgroup else 0.0, fault_rates, cfg),
+            "p_fa": p_fa,
+            "score": score_layout(float(np.mean(fault_rates)), p_fa if np.isfinite(p_fa) else 0.0, fault_rates, cfg),
         })
 
     by_layout: dict[str, list[dict]] = defaultdict(list)
@@ -73,7 +80,7 @@ def summarize_rows(rows: list[dict], false_rows: list[dict], cfg: Q4Config) -> t
             "layout": layout,
             "sensor_count": int(group[0]["sensor_count"]),
             "mean_pd_source": float(np.mean(source_rates)),
-            "low_snr_pd_source": float(np.mean([row["pd_source_mean"] for row in low_snr_group])),
+            "low_snr_pd_source": float(np.mean([row["pd_source_mean"] for row in low_snr_group])) if low_snr_group else float("nan"),
             "mean_pd_all": float(np.mean([row["pd_all"] for row in group])),
             "mean_p_fa": float(np.mean(pfa_values)) if pfa_values else float("nan"),
             "mean_balance_variance": float(np.mean([row["pd_source_variance"] for row in group])),
@@ -85,16 +92,19 @@ def summarize_rows(rows: list[dict], false_rows: list[dict], cfg: Q4Config) -> t
 
     coverage_rows = []
     best_layout = layout_ranking[0]["layout"] if layout_ranking else ""
-    for snr_db in sorted({row["snr_db"] for row in rows}):
-        group = [row for row in rows if row["layout"] == best_layout and row["snr_db"] == snr_db]
+    for snr_db in sorted({key[1] for key in grouped}):
+        group = grouped.get((best_layout, snr_db), [])
+        fault_rates = _fault_detection_rates(group)
         for index, label in enumerate(FAULT_LABELS):
             coverage_rows.append({
                 "layout": best_layout,
+                "scenario": "all_scenarios_mean",
+                "scenario_count": len({row["scenario"] for row in group}),
                 "snr_db": snr_db,
                 "fault_label": label,
                 "frequency_hz": float(DEFAULT_FREQUENCIES[index]),
                 "amplitude": float(DEFAULT_AMPLITUDES[index]),
-                "pd": _mean_bool(group, f"fault_{index + 1}_detected"),
+                "pd": fault_rates[index],
             })
     return snr_summary, layout_ranking, coverage_rows
 
@@ -102,16 +112,19 @@ def summarize_rows(rows: list[dict], false_rows: list[dict], cfg: Q4Config) -> t
 def benchmark_layout_names(layout_ranking: list[dict]) -> dict[str, str]:
     if not layout_ranking:
         return {}
-    single = next(row for row in layout_ranking if row["sensor_count"] == 1)
-    best_three = next(row for row in layout_ranking if row["sensor_count"] == 3)
+    single = next((row for row in layout_ranking if row["sensor_count"] == 1), None)
+    best_three = next((row for row in layout_ranking if row["sensor_count"] == 3), None)
     full = "+".join(SENSOR_NAMES)
     random_three = "bearing_left+gearbox_right+input_shaft"
-    return {
-        "single_best": single["layout"],
-        "random_three": random_three,
-        "best_three": best_three["layout"],
+    selected = {
         "all_sensors_reference": full,
     }
+    if single is not None:
+        selected["single_best"] = single["layout"]
+    if best_three is not None:
+        selected["random_three"] = random_three
+        selected["best_three"] = best_three["layout"]
+    return selected
 
 
 def run_experiments(
@@ -132,13 +145,19 @@ def run_experiments(
     layouts = all_layouts(max_sensors=3) + [tuple(SENSOR_NAMES)]
     detection_rows = []
     false_rows = []
+    t = default_time_axis(cfg)
+    sin_basis, cos_basis = basis_matrices(t, DEFAULT_FREQUENCIES)
     for scenario in scenarios:
         for layout in layouts:
             for snr_db in snr_levels:
                 for replicate in range(runs):
-                    detection_rows.append(evaluate_detection_trial(layout, scenario, snr_db, replicate, cfg))
+                    detection_rows.append(evaluate_detection_trial(
+                        layout, scenario, snr_db, replicate, cfg, t=t, sin_basis=sin_basis, cos_basis=cos_basis
+                    ))
                 for replicate in range(false_alarm_runs):
-                    false_rows.append(evaluate_false_alarm_trial(layout, scenario, snr_db, replicate, cfg))
+                    false_rows.append(evaluate_false_alarm_trial(
+                        layout, scenario, snr_db, replicate, cfg, t=t, sin_basis=sin_basis, cos_basis=cos_basis
+                    ))
     snr_summary, layout_ranking, coverage_rows = summarize_rows(detection_rows, false_rows, cfg)
     selected = benchmark_layout_names(layout_ranking)
     selected_rows = [

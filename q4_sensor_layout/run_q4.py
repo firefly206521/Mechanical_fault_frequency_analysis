@@ -29,6 +29,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.runs <= 0:
+        raise ValueError("--runs must be positive")
+    if args.false_alarm_runs < 0:
+        raise ValueError("--false-alarm-runs must be non-negative")
+    if args.threshold_mc <= 0:
+        raise ValueError("--threshold-mc must be positive")
+    if not args.snr_levels:
+        raise ValueError("--snr-levels must contain at least one value")
     cfg = Q4Config(
         fs=args.fs,
         duration_s=args.duration_s,

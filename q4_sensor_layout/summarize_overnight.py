@@ -6,22 +6,14 @@ import argparse
 import csv
 from pathlib import Path
 
+from ._io import write_csv
+
 
 def read_csv(path: Path) -> list[dict]:
     if not path.exists():
         return []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
-
-
-def write_csv(path: Path, rows: list[dict]) -> None:
-    if not rows:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def read_runtime(path: Path) -> dict:
@@ -93,4 +85,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -25,6 +25,7 @@ SENSOR_NAMES = (
     "input_shaft",
     "output_shaft",
 )
+SENSOR_INDEX = {name: index for index, name in enumerate(SENSOR_NAMES)}
 
 FAULT_LABELS = ("4Hz", "8Hz", "13Hz", "14Hz")
 DEFAULT_FREQUENCIES = np.asarray([3.999998173832588, 7.9999285714666994, 13.00008888535092, 14.000023485389158])
@@ -134,8 +135,7 @@ def all_layouts(max_sensors: int = 3) -> list[tuple[str, ...]]:
 
 
 def layout_indexes(layout: Iterable[str]) -> tuple[int, ...]:
-    lookup = {name: index for index, name in enumerate(SENSOR_NAMES)}
-    return tuple(lookup[name] for name in layout)
+    return tuple(SENSOR_INDEX[name] for name in layout)
 
 
 def trial_rng(experiment_id: int, replicate: int, seed: int = SEED) -> np.random.Generator:
@@ -224,9 +224,14 @@ def evaluate_detection_trial(
     cfg: Q4Config,
     frequencies: np.ndarray = DEFAULT_FREQUENCIES,
     amplitudes: np.ndarray = DEFAULT_AMPLITUDES,
+    t: np.ndarray | None = None,
+    sin_basis: np.ndarray | None = None,
+    cos_basis: np.ndarray | None = None,
 ) -> dict:
-    t = default_time_axis(cfg)
-    sin_basis, cos_basis = basis_matrices(t, frequencies)
+    if t is None:
+        t = default_time_axis(cfg)
+    if sin_basis is None or cos_basis is None:
+        sin_basis, cos_basis = basis_matrices(t, frequencies)
     rng = trial_rng(1000 + int(round(10 * snr_db)) + 37 * len(layout), replicate, cfg.random_seed)
     phases = rng.uniform(-np.pi, np.pi, len(frequencies))
     noise_stds = noise_stds_for_snr(amplitudes, snr_db, scenario)
@@ -256,9 +261,14 @@ def evaluate_false_alarm_trial(
     snr_db: float,
     replicate: int,
     cfg: Q4Config,
+    t: np.ndarray | None = None,
+    sin_basis: np.ndarray | None = None,
+    cos_basis: np.ndarray | None = None,
 ) -> dict:
-    t = default_time_axis(cfg)
-    sin_basis, cos_basis = basis_matrices(t, DEFAULT_FREQUENCIES)
+    if t is None:
+        t = default_time_axis(cfg)
+    if sin_basis is None or cos_basis is None:
+        sin_basis, cos_basis = basis_matrices(t, DEFAULT_FREQUENCIES)
     noise_stds = noise_stds_for_snr(DEFAULT_AMPLITUDES, snr_db, scenario)
     rng = trial_rng(7000 + int(round(10 * snr_db)) + 41 * len(layout), replicate, cfg.random_seed)
     noise = rng.normal(0.0, noise_stds[:, None], (len(SENSOR_NAMES), len(t)))

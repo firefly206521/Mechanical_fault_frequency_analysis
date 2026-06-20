@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import math
 from pathlib import Path
 
 import matplotlib
@@ -13,21 +11,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .core import DEFAULT_AMPLITUDES, DEFAULT_FREQUENCIES, FAULT_LABELS, SENSOR_NAMES
+from ._io import write_csv
 
 
 def configure_matplotlib() -> None:
     plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "SimSun", "Arial Unicode MS", "DejaVu Sans"]
     plt.rcParams["axes.unicode_minus"] = False
-
-
-def write_csv(path: Path, rows: list[dict]) -> None:
-    if not rows:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def write_plots(output_dir: Path, context: dict) -> list[Path]:
@@ -104,9 +93,18 @@ def write_report(path: Path, context: dict) -> None:
     ranking = context["layout_ranking"]
     selected = context["selected_snr_rows"]
     robustness = context["robustness_rows"]
+    cfg = context["config"]
+    if not ranking:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# 第四问：传感器布局与系统鲁棒性优化\n\n"
+            "本次运行没有产生可排序的布局结果。请检查 `runs`、`snr_levels` 和场景参数。\n",
+            encoding="utf-8",
+        )
+        return
     best = ranking[0]
-    best_three = next(row for row in ranking if row["sensor_count"] == 3)
-    best_single = next(row for row in ranking if row["sensor_count"] == 1)
+    best_three = next((row for row in ranking if row["sensor_count"] == 3), None)
+    best_single = next((row for row in ranking if row["sensor_count"] == 1), None)
     lines = [
         "# 第四问：传感器布局与系统鲁棒性优化",
         "",
@@ -128,9 +126,9 @@ def write_report(path: Path, context: dict) -> None:
         "",
         "布局评分函数为",
         "",
-        "$$J(S)=\\overline{P_D(S)}-2P_{FA}(S)-0.5\\operatorname{Var}_k(P_{D,k}(S)).$$",
+        f"$$J(S)=\\overline{{P_D(S)}}-{cfg.lambda_pfa:g}P_{{FA}}(S)-{cfg.mu_balance:g}\\operatorname{{Var}}_k(P_{{D,k}}(S)).$$",
         "",
-        "该目标同时考虑平均检测概率、误报率和不同故障源检测均衡性。最多选择 3 个传感器，因此直接枚举全部 1、2、3 测点组合。",
+        "该目标同时考虑平均检测概率、误报率和不同故障源检测均衡性。误报率主要由阈值校准控制，评分中的误报惩罚作为经验安全项，用于在有限 Monte Carlo 波动下优先保留误报更低的布局。最多选择 3 个传感器，因此直接枚举全部 1、2、3 测点组合。",
         "",
         "## 3. 敏感度矩阵",
         "",
@@ -144,7 +142,7 @@ def write_report(path: Path, context: dict) -> None:
         "",
         "## 4. 布局优化结果",
         "",
-        f"综合评分最高的布局为 `{best['layout']}`，其中三传感器最优布局为 `{best_three['layout']}`。单传感器最优为 `{best_single['layout']}`。",
+        f"综合评分最高的布局为 `{best['layout']}`，其中三传感器最优布局为 `{best_three['layout'] if best_three else '无'}`。单传感器最优为 `{best_single['layout'] if best_single else '无'}`。",
         "",
         "| 排名 | 布局 | 传感器数 | 平均检测概率 | 低SNR检测概率 | 平均误报率 | 均衡方差 | 评分 |",
         "|---:|---|---:|---:|---:|---:|---:|---:|",
