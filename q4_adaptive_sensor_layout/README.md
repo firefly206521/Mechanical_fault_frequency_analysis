@@ -24,6 +24,8 @@ Run a robustness diagnostic with response perturbation and correlated sensor noi
 python -m q4_adaptive_sensor_layout.run_q4_v1 --profile medium --output-dir q4_sensor_layout_v1_results_robustness_medium --response-gain-jitter 0.15 --response-phase-jitter 0.20 --noise-correlation 0.30
 ```
 
+Use `--response-jitter-mode sensor` for installation-like common perturbations across all frequencies of one sensor. Use `--response-jitter-mode element` only for a stricter per-sensor/per-frequency stress test.
+
 Default output directory:
 
 ```text

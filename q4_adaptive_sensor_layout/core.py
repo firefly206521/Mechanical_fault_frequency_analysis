@@ -51,6 +51,11 @@ class Q4V1Config:
     response_gain_jitter: float = 0.0
     response_phase_jitter: float = 0.0
     noise_correlation: float = 0.0
+    response_jitter_mode: str = "sensor"
+    validation_weight_pd: float = 0.45
+    validation_weight_low_snr: float = 0.35
+    validation_weight_min_pd: float = 0.20
+    validation_weight_fa_excess: float = -2.0
 
 
 @dataclass(frozen=True)
@@ -73,7 +78,7 @@ class LayoutEvaluation:
     layout: tuple[int, ...]
     objective: float
     robust_min_lambda: float
-    mean_lambda: float
+    raw_mean_lambda: float
     detection_min_lambda: float
     detection_mean_lambda: float
     trace_info: float
@@ -180,6 +185,11 @@ def noise_vector(points: list[CandidatePoint]) -> np.ndarray:
     return np.asarray([point.noise_std for point in points], dtype=float)
 
 
+def fusion_weight_vector(noise_stds: np.ndarray) -> np.ndarray:
+    inv_var = 1.0 / np.maximum(np.asarray(noise_stds, dtype=float) ** 2, np.finfo(float).eps)
+    return inv_var / np.sum(inv_var)
+
+
 def whitened_response(points: list[CandidatePoint]) -> np.ndarray:
     return response_matrix(points) / noise_vector(points)[:, None]
 
@@ -196,7 +206,7 @@ def point_scores(points: list[CandidatePoint]) -> list[dict]:
             "installable": point.installable,
             "noise_std": point.noise_std,
             "min_lambda": float(np.min(lambdas)),
-            "mean_lambda": float(np.mean(lambdas)),
+            "raw_mean_lambda": float(np.mean(lambdas)),
             "response_norm": float(np.linalg.norm(white[index])),
             "score": float(np.min(lambdas) + 0.20 * np.mean(lambdas)),
         })
@@ -245,8 +255,7 @@ def evaluate_layout(points: list[CandidatePoint], layout: Iterable[int], cfg: Q4
     sigma = noise_vector(points)[list(indexes)]
     white = h / sigma[:, None]
     lambdas = (DEFAULT_AMPLITUDES ** 2) * np.sum(np.abs(white) ** 2, axis=0)
-    inv_var = 1.0 / np.maximum(sigma ** 2, np.finfo(float).eps)
-    fusion_weights = inv_var / np.sum(inv_var)
+    fusion_weights = fusion_weight_vector(sigma)
     detection_lambdas = (DEFAULT_AMPLITUDES ** 2) * np.sum(fusion_weights[:, None] * np.abs(white) ** 2, axis=0)
     info = white.conj().T @ white
     regularized_info = info.real + cfg.eig_regularization * np.eye(info.shape[0])
@@ -275,7 +284,7 @@ def evaluate_layout(points: list[CandidatePoint], layout: Iterable[int], cfg: Q4
         layout=indexes,
         objective=float(objective),
         robust_min_lambda=robust_min,
-        mean_lambda=float(np.mean(lambdas)),
+        raw_mean_lambda=float(np.mean(lambdas)),
         detection_min_lambda=detection_min,
         detection_mean_lambda=detection_mean,
         trace_info=trace_info,
@@ -397,8 +406,14 @@ def generate_noise(noise_stds: np.ndarray, sample_count: int, rng: np.random.Gen
 def perturb_responses(responses: np.ndarray, rng: np.random.Generator, cfg: Q4V1Config) -> np.ndarray:
     if cfg.response_gain_jitter == 0.0 and cfg.response_phase_jitter == 0.0:
         return responses
-    gain = np.exp(rng.normal(0.0, cfg.response_gain_jitter, responses.shape))
-    phase = rng.normal(0.0, cfg.response_phase_jitter, responses.shape)
+    if cfg.response_jitter_mode == "sensor":
+        shape = (responses.shape[0], 1)
+    elif cfg.response_jitter_mode == "element":
+        shape = responses.shape
+    else:
+        raise ValueError("response jitter mode must be 'sensor' or 'element'")
+    gain = np.exp(rng.normal(0.0, cfg.response_gain_jitter, shape))
+    phase = rng.normal(0.0, cfg.response_phase_jitter, shape)
     return responses * gain * np.exp(1j * phase)
 
 
@@ -434,8 +449,7 @@ def projection_statistics(samples: np.ndarray, sin_basis: np.ndarray, cos_basis:
 
 
 def fused_statistics(stats: np.ndarray, noise_stds: np.ndarray) -> np.ndarray:
-    inv_var = 1.0 / np.maximum(noise_stds ** 2, np.finfo(float).eps)
-    weights = inv_var / np.sum(inv_var)
+    weights = fusion_weight_vector(noise_stds)
     return np.sum(stats * weights[:, None], axis=0)
 
 

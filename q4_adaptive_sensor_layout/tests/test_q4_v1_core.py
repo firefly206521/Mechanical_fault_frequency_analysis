@@ -7,6 +7,7 @@ from q4_adaptive_sensor_layout.core import (
     Q4V1Config,
     evaluate_layout,
     exhaustive_layouts,
+    fusion_weight_vector,
     generate_candidate_points,
     generate_noise,
     greedy_layout,
@@ -54,7 +55,12 @@ def test_layout_objective_uses_fusion_detection_proxy():
     evaluation = evaluate_layout(points, selected[:3], cfg=cfg)
     assert evaluation.detection_min_lambda > 0.0
     assert evaluation.detection_mean_lambda > 0.0
-    assert evaluation.objective < 10.0 * evaluation.mean_lambda
+    assert evaluation.objective < 10.0 * evaluation.raw_mean_lambda
+
+
+def test_fusion_weight_vector_normalizes_inverse_variance_weights():
+    weights = fusion_weight_vector(np.asarray([1.0, 2.0]))
+    np.testing.assert_allclose(weights, np.asarray([0.8, 0.2]))
 
 
 def test_response_similarity_zero_vectors_are_not_forced_redundant():
@@ -65,10 +71,10 @@ def test_response_similarity_zero_vectors_are_not_forced_redundant():
 
 def test_generate_noise_supports_correlated_sensor_noise():
     rng = np.random.default_rng(123)
-    noise = generate_noise(np.asarray([1.0, 2.0, 3.0]), 2000, rng, correlation=0.5)
-    assert noise.shape == (3, 2000)
+    noise = generate_noise(np.asarray([1.0, 2.0, 3.0]), 4000, rng, correlation=0.5)
+    assert noise.shape == (3, 4000)
     corr = np.corrcoef(noise)[0, 1]
-    assert corr > 0.25
+    assert corr > 0.40
 
 
 def test_generate_noise_rejects_invalid_correlation():

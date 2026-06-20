@@ -31,6 +31,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--response-gain-jitter", type=float, default=0.0)
     parser.add_argument("--response-phase-jitter", type=float, default=0.0)
     parser.add_argument("--noise-correlation", type=float, default=0.0)
+    parser.add_argument("--response-jitter-mode", choices=("sensor", "element"), default="sensor")
+    parser.add_argument("--validation-weight-pd", type=float, default=0.45)
+    parser.add_argument("--validation-weight-low-snr", type=float, default=0.35)
+    parser.add_argument("--validation-weight-min-pd", type=float, default=0.20)
+    parser.add_argument("--validation-weight-fa-excess", type=float, default=-2.0)
     return parser.parse_args()
 
 
@@ -74,6 +79,11 @@ def main() -> None:
         response_gain_jitter=args.response_gain_jitter,
         response_phase_jitter=args.response_phase_jitter,
         noise_correlation=args.noise_correlation,
+        response_jitter_mode=args.response_jitter_mode,
+        validation_weight_pd=args.validation_weight_pd,
+        validation_weight_low_snr=args.validation_weight_low_snr,
+        validation_weight_min_pd=args.validation_weight_min_pd,
+        validation_weight_fa_excess=args.validation_weight_fa_excess,
     )
     context = run_experiments(
         cfg=cfg,

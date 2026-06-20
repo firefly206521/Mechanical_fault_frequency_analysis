@@ -63,7 +63,7 @@ def _layout_rows(points, evaluations, benchmark_map: dict[str, str]) -> list[dic
             "benchmark": benchmark_map.get(name, "v1_adaptive_candidate"),
             "objective": evaluation.objective,
             "robust_min_lambda": evaluation.robust_min_lambda,
-            "mean_lambda": evaluation.mean_lambda,
+            "raw_mean_lambda": evaluation.raw_mean_lambda,
             "detection_min_lambda": evaluation.detection_min_lambda,
             "detection_mean_lambda": evaluation.detection_mean_lambda,
             "trace_info": evaluation.trace_info,
@@ -177,7 +177,7 @@ def summarize_detection(rows: list[dict]) -> list[dict]:
     return summary
 
 
-def summarize_validated_layouts(detection_summary: list[dict], target_p_fa: float) -> list[dict]:
+def summarize_validated_layouts(detection_summary: list[dict], cfg: Q4V1Config) -> list[dict]:
     grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for row in detection_summary:
         grouped[(row["layout"], row["regions"], row["benchmark"])].append(row)
@@ -187,8 +187,13 @@ def summarize_validated_layouts(detection_summary: list[dict], target_p_fa: floa
         low_snr_pd = float(np.mean([float(row["pd_source_mean"]) for row in group if float(row["snr_db"]) <= -12.0]))
         min_pd = float(np.mean([float(row["pd_source_min"]) for row in group]))
         mean_p_fa = float(np.mean([float(row["p_fa"]) for row in group]))
-        false_alarm_excess = max(0.0, mean_p_fa - target_p_fa)
-        score = 0.45 * mean_pd + 0.35 * low_snr_pd + 0.20 * min_pd - 2.0 * false_alarm_excess
+        false_alarm_excess = max(0.0, mean_p_fa - cfg.p_fa)
+        score = (
+            cfg.validation_weight_pd * mean_pd
+            + cfg.validation_weight_low_snr * low_snr_pd
+            + cfg.validation_weight_min_pd * min_pd
+            + cfg.validation_weight_fa_excess * false_alarm_excess
+        )
         rows.append({
             "layout": layout,
             "regions": regions,
@@ -243,7 +248,7 @@ def run_experiments(
         trial_rows.extend(_run_detection_trials(points, evaluation.layout, label, snr_levels, runs, false_alarm_runs, cfg))
 
     detection_summary = summarize_detection(trial_rows)
-    validated_layout_rows = summarize_validated_layouts(detection_summary, cfg.p_fa)
+    validated_layout_rows = summarize_validated_layouts(detection_summary, cfg)
     validation_by_layout = {row["layout"]: row for row in validated_layout_rows}
     layout_rows = _layout_rows(points, selected_evals, benchmark_map)
     for row in layout_rows:

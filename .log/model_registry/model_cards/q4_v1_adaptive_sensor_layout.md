@@ -21,7 +21,9 @@
 - Redundancy and information-matrix terms are scaled by detection strength.
 - Default target false alarm probability: `0.05`.
 - Official-check command used grid size `160`, `800` signal runs per SNR, `1600` false-alarm runs per SNR, and `800` threshold Monte Carlo samples.
-- Robustness controls include response gain jitter, response phase jitter, and equicorrelated sensor noise.
+- Robustness controls include response gain jitter, response phase jitter, response jitter mode, and equicorrelated sensor noise.
+- Response jitter mode defaults to per-sensor common jitter; per-element jitter remains available as a stricter stress test.
+- Monte Carlo validation-score weights are configurable and logged with each run.
 
 ## Strengths
 
@@ -37,6 +39,7 @@
 - The best V1 layout is sensitive to the response field; top layouts cluster around gearbox-zone candidates in the current example.
 - Exhaustive search over the prescreened 40 points is still used as the trusted final selector because greedy+swap can miss the exact top layout.
 - The analytic objective best can differ from the Monte Carlo validated best under response perturbation and correlated noise.
+- Result directories created before the round-2 review fix used per-element response jitter by default and wrote `mean_lambda`; post-fix runs default to per-sensor jitter and write `raw_mean_lambda`.
 - The model is not yet a replacement for V0 in the paper mainline without additional robustness tests.
 
 ## Failure Scenarios
