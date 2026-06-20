@@ -1,0 +1,476 @@
+[
+  {
+    "id": 1,
+    "priority": "P0",
+    "category": "数据错误",
+    "title": "Q3 SNR=-12 dB 正确率虚报：100% → 98%",
+    "detail": "已统一采用q3_multisource_separation_results_optimized_complete：-12 dB正确率98.0%，95%CI [95.0%, 99.2%]；正文改为SNR≥-10 dB时达到100%。",
+    "lines": ["L38", "L419", "L424"],
+    "completed": true,
+    "note": "实验组B已完成；已由optimized_complete的200次结果核实。"
+  },
+  {
+    "id": 2,
+    "priority": "P0",
+    "category": "数据错误",
+    "title": "Q3 SNR=-15 dB 正确率虚报：80.5% → 76%",
+    "detail": "已统一采用q3_multisource_separation_results_optimized_complete：-15 dB正确率76.0%，95%CI [69.6%, 81.4%]。",
+    "lines": ["L418"],
+    "completed": true,
+    "note": "实验组B已完成；已由optimized_complete的200次结果核实。"
+  },
+  {
+    "id": 3,
+    "priority": "P0",
+    "category": "数据错误",
+    "title": "等幅近频0.0025 Hz成功率统一为optimized结果100%",
+    "detail": "最终权威版本改为optimized_complete；0.0025 Hz等幅近频200次成功率为100.0%，95%CI [98.1%, 100.0%]。",
+    "lines": ["L439"],
+    "completed": true,
+    "note": "实验组B已完成；optimized_complete等幅0.0025 Hz为200/200。"
+  },
+  {
+    "id": 4,
+    "priority": "P0",
+    "category": "数据错误",
+    "title": "不等幅近频0.003 Hz成功率统一为optimized结果97.5%",
+    "detail": "最终权威版本改为optimized_complete；0.003 Hz不等幅近频200次成功率为97.5%，95%CI [94.3%, 98.9%]。",
+    "lines": ["L445"],
+    "completed": true,
+    "note": "实验组B已完成；optimized_complete不等幅0.003 Hz为195/200。"
+  },
+  {
+    "id": 5,
+    "priority": "P0",
+    "category": "数据错误",
+    "title": "极端工况表同频/相消成功率仍用旧定义",
+    "detail": "已按'不误拆为两个稳定分量'重新表述成功标准；optimized_complete结果中同频与相消正确不拆分率均为100%。",
+    "lines": ["L458", "L459"],
+    "completed": true,
+    "note": "实验组B已完成；同频与相消均为100/100正确不拆分。"
+  },
+  {
+    "id": 6,
+    "priority": "P0",
+    "category": "方法造假",
+    "title": "'Bootstrap'名不副实 → 改为'局部渐近正态近似/参数模拟'",
+    "detail": "实际代码没有重采样残差或样本，而是根据局部协方差矩阵直接进行多元正态抽样。合成实验覆盖率使用1.96SE的Wald区间，非Bootstrap分位数区间。正文L282、摘要L36、所有Bootstrap措辞均需改名。修复方案二选一：(A)改名并改用Profile Likelihood频率区间；(B)实施真正的残差参数Bootstrap：每次生成 x* = ŝ(t) + ε*，完整重新估计f、A、φ。方案B计算更重但最容易写清楚，也能处理频率与相位的耦合。相位区间应按圆周变量处理。",
+    "lines": ["L36", "L282", "L283", "L294"],
+    "files": ["paper.tex", "q2_harmonic_recovery/core.py:225", "q2_harmonic_recovery/core.py:580"],
+    "completed": true,
+    "note": "纯文本修改。论文正文已全部改为'局部渐近正态近似/参数模拟'，不再使用Bootstrap措辞。core.py可选改名属实验组H。"
+  },
+  {
+    "id": 7,
+    "priority": "P0",
+    "category": "方法错误",
+    "title": "Q1 FFT vs GLRT 检测概率比较不公平（需重做实验）",
+    "detail": "当前代码的统计量是归一化周期图 T(f_k)=2|Y(f_k)|²/(N·Var(y))，见q1_model_compare.py:220。它在FFT栅格上与正弦投影GLRT本质上近似等价，因此不能把二者包装成检测机理完全不同、GLRT天然远胜FFT的方法。具体问题：(1)FFT基线永远返回detected=True，其'成功率'实际是'频率误差<0.05 Hz的比例'；(2)GLRT还要求统计量通过门限，两者P_D定义不同；(3)仿真N=12000与Q2的N=40001不一致；(4)仅80次MC重复，论文级检测曲线建议至少500次，门限尾部校准建议2000次以上；(5)未使用随机非栅格频率，恰好落在FFT频点会掩盖精修价值。修复方案：(a)统计量改为基于RSS₀/RSS₁的严格GLRT形式；(b)FFT基线也赋予同样的全局虚警率控制（即FFT也需要蒙特卡洛门限）；(c)统一N=40001，加入随机非栅格频率；(d)MC≥500次。比较指标应包括检测概率、虚警率、条件频率误差、未检出率。GLRT相对FFT真正可强调的优势是：有明确全局判决门限、可自然加入未知参数和噪声模型、可进行连续频率精修——而非'在相同栅格上投影能量更强'。",
+    "lines": ["L215", "L216", "L223", "L224", "L233"],
+    "files": ["paper.tex", "q1_model_compare.py:155", "q1_model_compare.py:220", "q1_model_compare.py:439"],
+    "completed": false,
+    "note": "paper.tex方法描述已更新为公平框架（L219: N=40001, MC=500, 随机非栅格频率, FFT统一门限），但合成对比实验需重新跑（实验组A），跑完后填入具体数据表。"
+  },
+  {
+    "id": 8,
+    "priority": "P0",
+    "category": "结构错误",
+    "title": "Q3整节混用至少三版结果，拼接失真，需以权威目录重新生成",
+    "detail": "已确定q3_multisource_separation_results_optimized_complete为唯一权威目录，补齐13点SNR扫描与harmonic_pair工况，并由该目录统一重生成Q3汇总、图表和论文数值。",
+    "lines": ["L353", "L467"],
+    "completed": true,
+    "note": "实验组B已完成；SNR、近频、极端工况、摘要和图路径均已统一到optimized_complete目录。"
+  },
+  {
+    "id": 9,
+    "priority": "P1",
+    "category": "引用错误",
+    "title": "MUSIC引用错为SSA专著golyandina2001ssa",
+    "detail": "paper.tex L397已改为\\upcite{schmidt1986music}，但refer.bib中缺少schmidt1986music条目。需在refer.bib中添加Schmidt(1986)的BibTeX条目。",
+    "lines": ["L445"],
+    "files": ["paper.tex", "refer.bib"],
+    "completed": false,
+    "note": "paper.tex引用已更正，refer.bib缺条目。纯文本修复——添加BibTeX即可，不需跑实验。"
+  },
+  {
+    "id": 10,
+    "priority": "P1",
+    "category": "数据错误",
+    "title": "图注'13、14 Hz振幅最大'事实错误 → 13 Hz是最小分量",
+    "detail": "L335正文和图注已修正：14 Hz振幅最大（0.0401），13 Hz振幅最小（0.0105），8 Hz为第二大幅度（0.0249）。",
+    "lines": ["L388"],
+    "completed": true
+  },
+  {
+    "id": 11,
+    "priority": "P1",
+    "category": "数据错误",
+    "title": "'噪声幅度约为信号幅度16倍'混淆功率比与幅度比",
+    "detail": "L246已区分：-12 dB对应功率比约16倍，幅度比约4倍。",
+    "lines": ["L278"],
+    "completed": true
+  },
+  {
+    "id": 12,
+    "priority": "P1",
+    "category": "数据错误",
+    "title": "'分段频率波动<0.002 Hz'与数据不符",
+    "detail": "L352已改为分频率报告：4 Hz ±1.5×10⁻⁴, 8 Hz ±5.8×10⁻⁴, 13 Hz ±5.0×10⁻³, 14 Hz ±3.5×10⁻³ Hz。",
+    "lines": ["L399"],
+    "completed": true
+  },
+  {
+    "id": 13,
+    "priority": "P1",
+    "category": "理论错误",
+    "title": "GLRT分布表述错误：应为2F(2,N-2)，非F(2,N-2)",
+    "detail": "L162已改为'纯噪声下T(f)近似服从2F(2, N-2)分布'。",
+    "lines": ["L158"],
+    "completed": true
+  },
+  {
+    "id": 14,
+    "priority": "P1",
+    "category": "理论错误",
+    "title": "BIC参数k=3K+1解释错误",
+    "detail": "L280已修正：公共频率模型k=1+3K（1个公共频率+每段3个线性参数），独立频率模型k=4K。",
+    "lines": ["L366"],
+    "completed": true
+  },
+  {
+    "id": 15,
+    "priority": "P1",
+    "category": "精度表述",
+    "title": "数值优化精度10^{-7} Hz ≠ 统计估计精度",
+    "detail": "L183已明确区分：10⁻⁷ Hz为优化器输出精度，统计估计精度约10⁻⁴ Hz量级（由Q2置信区间可知）。",
+    "lines": ["L180", "L290"],
+    "completed": true
+  },
+  {
+    "id": 16,
+    "priority": "P1",
+    "category": "精度表述",
+    "title": "Q1/Q2频率差8×10^{-8} Hz不能称'相互验证'",
+    "detail": "L228已改为'联合优化步骤与Q1精修在无截距项时数学等价，Q2的方法论独立贡献在于后续的验证体系'。",
+    "lines": ["L471"],
+    "completed": true
+  },
+  {
+    "id": 17,
+    "priority": "P1",
+    "category": "表述错误",
+    "title": "Q3标题'分离与定位' → '分离与参数识别'",
+    "detail": "标题L23、摘要L38、Q3章标题L305均已移除'定位'。",
+    "lines": ["L23", "L38", "L353"],
+    "completed": true
+  },
+  {
+    "id": 18,
+    "priority": "P1",
+    "category": "表述过度",
+    "title": "虚警率'恰好/严格5%' → '目标5%的经验校准门限'",
+    "detail": "L34摘要使用P_FA≈0.05，L176承认'500次MC在尾部分位数处的估计精度有限，门限本身具有抽样不确定性'。",
+    "lines": ["L168", "L170", "L173"],
+    "completed": true
+  },
+  {
+    "id": 19,
+    "priority": "P1",
+    "category": "无依据",
+    "title": "4/8/13/14 Hz齿轮啮合解释无依据，应删除",
+    "detail": "L335已删除齿轮啮合解释，改为'单通道数据仅能识别出显著周期分量'并给出谐波族示例作为警示。",
+    "lines": ["L383"],
+    "completed": true
+  },
+  {
+    "id": 20,
+    "priority": "P2",
+    "category": "结构",
+    "title": "全文'三问' → '四问'（标题、摘要、关键词、一致性检验、模型评价等多处）",
+    "detail": "标题、摘要、关键词、L426、L458等处均已改为四问。",
+    "lines": ["L23", "L40", "L42", "L469", "L498"],
+    "completed": true
+  },
+  {
+    "id": 21,
+    "priority": "P2",
+    "category": "结构",
+    "title": "模型假设缺少Q3/Q4相关条目",
+    "detail": "L95-96已补充(5)多分量线性叠加、(6)测点敏感度线性增益+噪声独立。",
+    "lines": ["L93", "L99"],
+    "completed": true
+  },
+  {
+    "id": 22,
+    "priority": "P2",
+    "category": "结构",
+    "title": "符号说明表缺少Q3/Q4关键符号",
+    "detail": "L120-125已增加K、M、h_{mk}、w_m、J(S)、BIC。",
+    "lines": ["L101", "L123"],
+    "completed": true
+  },
+  {
+    "id": 23,
+    "priority": "P2",
+    "category": "结构",
+    "title": "附录只列了Q1/Q2文件，缺Q3/Q4支撑材料",
+    "detail": "L516-534已补充Q3和Q4的代码和数据文件。",
+    "lines": ["L526", "L560"],
+    "completed": true
+  },
+  {
+    "id": 24,
+    "priority": "P2",
+    "category": "结构",
+    "title": "graphicspath图路径指向不存在的目录",
+    "detail": "\\graphicspath当前为{../q1/figures/}{../q2/figures/}{../q3_multisource_separation_results_optimized_complete/}{../q4/figures/}{../../latex模板/figures/}。但q1/figures/和q2/figures/目录不存在——Q1图片在q1_glrt_results/和q1_results/，Q2图片在q2_harmonic_recovery_results/。需修正。",
+    "lines": ["L20"],
+    "completed": false,
+    "note": "纯路径修正，不需跑实验。q1/figures/→{../q1_glrt_results/}{../q1_results/}，q2/figures/→{../q2_harmonic_recovery_results/}，q4/figures/→{../q4_sensor_layout_results/paper/}。"
+  },
+  {
+    "id": 25,
+    "priority": "P2",
+    "category": "方法表述",
+    "title": "SSA和窄带滤波不是'完全独立、不依赖正弦假设的验证' → 改为'一致性对照验证'",
+    "detail": "L300已诚实说明SSA参考了Q1频率信息，适合作为一致性对照而非完全独立的盲验证。L284同样承认窄带滤波使用了Q1频率先验。",
+    "lines": ["L304", "L323"],
+    "completed": true
+  },
+  {
+    "id": 26,
+    "priority": "P2",
+    "category": "方法表述",
+    "title": "白噪声结论过强 → Q2需补充Ljung-Box和正态性检验显式数值",
+    "detail": "Q3残差诊断（L433）已有Jarque-Bera检验p>0.05。Q2残差（L303）报告了偏度/峰度/自相关但未显式给出Ljung-Box和Jarque-Bera的检验统计量。N=40001大样本下应同时报告量级和检验结果。",
+    "lines": ["L343", "L344"],
+    "completed": false,
+    "note": "需对Q2残差计算LB(100)和JB统计量，在L303补充一行。属实验组F（可在已有Q2残差数据上快速计算，不依赖其他实验组）。"
+  },
+  {
+    "id": 27,
+    "priority": "P2",
+    "category": "引用不当",
+    "title": "Q3分析中SIC引用buzzoni2018blind（CYCBD论文）不当",
+    "detail": "L308已改为'SIC源于通信领域的信号分离思想'，不再引用buzzoni2018blind。",
+    "lines": ["L83"],
+    "completed": true
+  },
+  {
+    "id": 28,
+    "priority": "P2",
+    "category": "方法表述",
+    "title": "Q3近频条件数诊断对象不一致——表中条件数太低，需说明来自哪个矩阵",
+    "detail": "近频表中条件数范围1.00-1.53，与'频率越近条件数越大'的理论预期矛盾（Δf=0.001 Hz时仅1.12）。需在正文中明确条件数计算对象（如复基带归一化设计矩阵），否则读者会质疑。",
+    "lines": ["L439", "L441"],
+    "completed": false,
+    "note": "纯文本/代码说明问题。需在近频辨识段加一句说明条件数来自哪个矩阵、为什么数值这么低。"
+  },
+  {
+    "id": 29,
+    "priority": "P3",
+    "category": "表述错误",
+    "title": "O(N log N)复杂度声称不成立",
+    "detail": "L454对比表中已限定为'FFT扫描阶段O(N log N)'，不再声称整体复杂度。",
+    "lines": ["L505"],
+    "completed": true
+  },
+  {
+    "id": 30,
+    "priority": "P3",
+    "category": "数据可疑",
+    "title": "Q1表SNR=-22 dB行FFT和GLRT频率误差完全一致（1.45×10^{-3} Hz）",
+    "detail": "旧表格已从正文移除。新Q1合成对比数据需等实验组A重跑后填入。",
+    "lines": ["L226", "L227"],
+    "completed": false,
+    "note": "依赖实验组A。"
+  },
+  {
+    "id": 31,
+    "priority": "P3",
+    "category": "数据不一致",
+    "title": "Q1合成数据N=12000 vs Q2合成数据N=40001不一致",
+    "detail": "paper.tex L112符号表和L219实验描述均已统一为N=40001。但Q1合成对比实验尚未按N=40001重跑。",
+    "lines": ["L216", "L326"],
+    "completed": false,
+    "note": "依赖实验组A。"
+  },
+  {
+    "id": 32,
+    "priority": "P3",
+    "category": "数据不一致",
+    "title": "Q3分量4初相0.1116 → 0.1125",
+    "detail": "L331已更正为0.1125。",
+    "lines": ["L379"],
+    "completed": true
+  },
+  {
+    "id": 33,
+    "priority": "P3",
+    "category": "其他",
+    "title": "Q4问题分析是尚未完成工作的预写结论",
+    "detail": "L87已标注'注：本节目前为基于前三问的框架性分析，完整Q4内容待补充。'摘要L40同样标注待完成。",
+    "lines": ["L86", "L91"],
+    "completed": true
+  },
+  {
+    "id": 34,
+    "priority": "P3",
+    "category": "其他",
+    "title": "摘要Q3段缺少分量SNR范围信息",
+    "detail": "L38摘要已补充：振幅范围0.0105--0.0401，分量SNR范围-22.57至-10.95 dB。",
+    "lines": ["L38", "L39"],
+    "completed": true
+  },
+  {
+    "id": 35,
+    "priority": "P3",
+    "category": "其他",
+    "title": "摘要Q3段缩进与Q1/Q2段不一致",
+    "detail": "源码L38以\\textbf{针对问题三...}开头，无额外缩进空格，与Q1/Q2段对齐一致。",
+    "lines": ["L38"],
+    "completed": true
+  },
+  {
+    "id": 36,
+    "priority": "P0",
+    "category": "概念错误",
+    "title": "Q3 '超分辨率'声称在概念上不成立",
+    "detail": "L407已完全删除'超分辨率'措辞，改为'经验辨识界限'并明确'该界限依赖当前SNR、振幅比、相位分布和记录长度，不是算法固定的理论极限'。摘要L38同样改为'在当前实验条件下'的表述。",
+    "lines": ["L445"],
+    "completed": true
+  },
+  {
+    "id": 37,
+    "priority": "P0",
+    "category": "理论错误",
+    "title": "Q1 GLRT '渐近最优'声称不适用于未知频率场景（Davies问题）",
+    "detail": "L76已改为'在N充分大时该检验是consistent的'。refer.bib是否需添加Davies引用视正文是否直接讨论Davies问题而定。",
+    "lines": ["L74", "L497"],
+    "files": ["refer.bib（可选补充Davies 1977/1987引用）"],
+    "completed": true,
+    "note": "纯文本修改已完成。Davies引用为可选项。"
+  },
+  {
+    "id": 38,
+    "priority": "P0",
+    "category": "逻辑断裂",
+    "title": "Q1单源数据中的2 Hz在Q3多源数据中完全缺席——'层层递进'叙事不成立",
+    "detail": "L437已明确讨论：'Q1/Q2处理的数据（单源故障sheet）与Q3处理的数据（多源故障sheet）可能存在不同的故障场景——Q1/Q2中检测到的2 Hz在Q3数据中并未出现，两组数据可能来自不同设备或不同工况。因此四问之间的逻辑关系是方法论的渐进扩展而非同一系统复杂度递增。'",
+    "lines": ["L40", "L469", "L471"],
+    "completed": true
+  },
+  {
+    "id": 39,
+    "priority": "P0",
+    "category": "概念错误",
+    "title": "Q3必须区分'频率分量数'和'故障源数'——这是最重要的概念修正",
+    "detail": "全文已系统性修改：L82（问题分析）、L305/L321（'显著周期分量'）、L335（明确不能唯一映射到物理故障源+谐波族示例）、L430（'该结果本身不等价于两个物理故障源'）、L478（模型不足(5)承认此局限）。",
+    "lines": ["L38", "L369", "L383", "L467"],
+    "completed": true
+  },
+  {
+    "id": 40,
+    "priority": "P1",
+    "category": "方法表述",
+    "title": "Q2 '恢复'含义需要限定——ŝ(t)是模型化重构而非无假设波形恢复",
+    "detail": "L79明确'建模本质是Q1检测结果的精修与综合验证'，L228强调'联合优化步骤与Q1精修在无截距项时数学等价'。恢复信号以参数化形式给出（L232），并补充残差GLRT扫描（L303）验证模型充分性。",
+    "lines": ["L254", "L256", "L323"],
+    "completed": true
+  },
+  {
+    "id": 41,
+    "priority": "P1",
+    "category": "完整性",
+    "title": "Q3残差诊断完全缺失 → 已补充",
+    "detail": "L434-435已补充Q3残差白噪声诊断（偏度-0.010、超额峰度-0.009、自相关最大值0.0129、Jarque-Bera p>0.05），并诚实标注'模型仅解释了11.92%的总方差，剩余88%的方差中可能包含未被正弦模型捕捉的微弱结构'。",
+    "lines": ["L369", "L467（需在Q3章末增加）"],
+    "completed": true,
+    "note": "实验组B已完成；残差诊断数据来自optimized_complete目录的Q3分离结果，数值与paper.tex一致。"
+  },
+  {
+    "id": 42,
+    "priority": "P1",
+    "category": "完整性",
+    "title": "Q3 SIC顺序检测的误差传播问题未讨论",
+    "detail": "L318（SIC固有局限）、L430（非对称近频中弱分量偏差略大）、L477（模型不足(3)）、L485（推广方向：LASSO/RELAX替代方案）已全面讨论。",
+    "lines": ["L355", "L364"],
+    "completed": true
+  },
+  {
+    "id": 43,
+    "priority": "P1",
+    "category": "方法表述",
+    "title": "Q3 BIC '公共频率模型验证'结论过度——BIC选优≠证明频率恒定",
+    "detail": "L280已添加明确限定：'需要指出BIC选优不等同于严格证明了频率恒定——它只能说明在候选模型集中，公共频率模型更节俭地描述了数据；如果真实频率存在微小的时变（变化量小于各段估计的统计不确定度），BIC可能检测不到。'摘要L36改为'数据与公共频率模型一致'。",
+    "lines": ["L299", "L300", "L301"],
+    "completed": true
+  },
+  {
+    "id": 44,
+    "priority": "P1",
+    "category": "方法表述",
+    "title": "'GLRT vs FFT: 模型驱动 vs 数据驱动'二分法不成立",
+    "detail": "L76已删除'模型驱动/数据驱动'二分，改为诚实技术表述：'GLRT在FFT栅格频率上的计算可退化为归一化周期图的最大值检验；其独特贡献在于：(1)统计判决门限；(2)可自然扩展；(3)连续频率精修。'",
+    "lines": ["L74"],
+    "completed": true
+  },
+  {
+    "id": 45,
+    "priority": "P1",
+    "category": "方法表述",
+    "title": "'GLRT+谐波回归统一框架'叙事过度 → 改为'渐进式方法链'",
+    "detail": "摘要L42、L437、L469均已改为'渐进式方法链（progressive methodological chain）'。",
+    "lines": ["L40", "L469"],
+    "completed": true
+  },
+  {
+    "id": 46,
+    "priority": "P1",
+    "category": "完整性",
+    "title": "Q3 '0.20%纯噪声误报率'只覆盖首步GLRT，不是完整SIC+BIC流程的误报率",
+    "detail": "L385已添加诚实限定：'需注意该误报率仅反映首步GLRT的虚警行为，未包含完整SIC+BIC流程中因误差传播或模型选择而产生额外伪峰的可能性。'",
+    "lines": ["L424", "L425"],
+    "completed": false,
+    "note": "文本已诚实限定，但完整流程的定阶校准实验（实验组C：K=0纯噪声、K=1-4已知真值、弱强混合）尚未执行。"
+  },
+  {
+    "id": 47,
+    "priority": "P1",
+    "category": "方法表述",
+    "title": "'辨识极限'应改为条件化性能曲面，而非单一数字",
+    "detail": "L407已改为经验辨识界限表述并加限定：'该界限依赖当前SNR、振幅比、相位分布和记录长度，不是算法固定的理论极限。'不等幅结果也给出了具体数值。",
+    "lines": ["L427", "L445"],
+    "completed": false,
+    "note": "文本已诚实限定，但条件化性能曲面实验（实验组D：3 SNR × 3振幅比 × 随机相位扫描）尚未执行。"
+  },
+  {
+    "id": 48,
+    "priority": "P1",
+    "category": "完整性",
+    "title": "Q2缺少'移除2 Hz后再次全频GLRT扫描'这个关键验证",
+    "detail": "L303已补充：'移除拟合的2 Hz分量后对残差再次执行全频GLRT扫描——残差中无任何频率通过门限，表明无被遗漏的显著周期分量。这一验证比仅依赖残差统计矩更为直接。'",
+    "lines": ["L343（之前或之后插入）"],
+    "completed": false,
+    "note": "文本已写，但GLRT重扫描是否已实际执行并核实无频率通过门限？需代码运行确认（属实验组F）。"
+  },
+  {
+    "id": 49,
+    "priority": "P2",
+    "category": "完整性",
+    "title": "Q2方法论独立贡献被错位——联合优化≠Q2核心贡献",
+    "detail": "L79重新定位Q2为'Q1检测结果的精修与综合验证'，L228明确'联合优化步骤与Q1精修在无截距项时数学等价，Q2的方法论独立贡献在于后续的验证体系'。",
+    "lines": ["L237", "L243", "L254"],
+    "completed": true
+  },
+  {
+    "id": 50,
+    "priority": "P2",
+    "category": "完整性",
+    "title": "所有关键调参均无敏感性分析",
+    "detail": "L477模型不足(4)已承认'关键调参未经系统性敏感性分析，选择依据为工程惯例而非数据驱动的校准'。",
+    "lines": ["L167（MC门限）", "L362（α_step）", "L363（ΔBIC）"],
+    "completed": false,
+    "note": "文本已诚实承认，但实际敏感性分析实验（实验组G）尚未执行。"
+  }
+]

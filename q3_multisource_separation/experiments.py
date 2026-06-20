@@ -17,7 +17,7 @@ from .core import (
 )
 
 
-SNR_LEVELS = (-20.0, -15.0, -12.0, -10.0, -5.0)
+SNR_LEVELS = (-22.0, -20.0, -18.0, -16.0, -15.0, -14.0, -12.0, -10.0, -8.0, -6.0, -4.0, -2.0, 0.0)
 SEPARATIONS = (0.00025, 0.0005, 0.00075, 0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005, 0.0075, 0.01)
 AMPLITUDE_CASES = {
     "equal": (0.02, 0.02),
@@ -29,6 +29,7 @@ EXTREME_CASES = (
     "non_symmetric_close",
     "identical_frequency",
     "phase_cancellation",
+    "harmonic_pair",
     "overcomplete_k8",
     "impulsive_noise",
     "low_frequency_boundary",
@@ -237,6 +238,7 @@ def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: floa
     success_mode = "correct_k"
     theoretical_identifiable = True
     noise_kind = "gaussian"
+    frequency_tolerance = None
 
     if case_name == "very_low_snr_-25":
         frequencies = truth_f
@@ -272,6 +274,12 @@ def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: floa
         expected_k = 1
         success_mode = "non_identifiable"
         theoretical_identifiable = False
+    elif case_name == "harmonic_pair":
+        frequencies = np.asarray([4.0, 8.0])
+        amplitudes = np.asarray([0.019103, 0.024889])
+        phases = rng.uniform(-np.pi, np.pi, 2)
+        sigma = noise_std
+        frequency_tolerance = 0.0025
     elif case_name == "overcomplete_k8":
         frequencies = np.asarray([3.0, 5.5, 8.0, 11.0, 13.0, 16.0, 21.0, 29.0])
         amplitudes = np.asarray([0.035, 0.030, 0.026, 0.023, 0.020, 0.018, 0.016, 0.014])
@@ -318,7 +326,9 @@ def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: floa
     if success_mode == "non_identifiable":
         success = len(estimated_f) <= target_k
     else:
-        tolerance = 0.0025 if true_k > 2 else max(0.0005, np.min(np.diff(np.sort(frequencies))) / 4.0)
+        tolerance = frequency_tolerance if frequency_tolerance is not None else (
+            0.0025 if true_k > 2 else max(0.0005, np.min(np.diff(np.sort(frequencies))) / 4.0)
+        )
         success = len(estimated_f) == target_k and np.isfinite(frequency_mae) and frequency_mae <= tolerance and not estimate["ill_conditioned"]
     return {
         "case_name": case_name,
