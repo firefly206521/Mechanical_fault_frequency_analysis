@@ -116,12 +116,17 @@ def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config)
     idx = np.where(mask)[0][np.argmax(power[mask])]
     coarse_freq = float(freqs[idx])
     refined = refine_frequency(t, y, coarse_freq, fs)
+    # Use the same statistical threshold as GLRT, converted from
+    # normalised statistic to raw periodogram units.
+    glrt_threshold = estimate_glrt_threshold(len(y), fs, cfg)
+    sigma2 = float(np.var(y))
+    power_threshold = glrt_threshold * len(y) * sigma2 / 2.0
     return {
-        "detected": True,
+        "detected": bool(float(power[idx]) >= power_threshold),
         "coarse_frequency_hz": coarse_freq,
         "refined_frequency_hz": refined["frequency"],
         "score": float(power[idx]),
-        "threshold": np.nan,
+        "threshold": float(power_threshold),
         "amplitude": refined["amplitude"],
         "phase": refined["phase"],
         "fit_rmse": refined["rmse"],
@@ -226,15 +231,17 @@ def run_fft_glrt_simulation(
 
     for snr_db in snr_values:
         per_method = {"FFT peak": {"success": [], "error": []}, "GLRT": {"success": [], "error": []}}
+        half_bin = fs / (2.0 * sim_n)  # random non-grid frequency offset per trial
         for _ in range(sim_mc):
-            sim_t, sim_x = synthetic_signal(fs, sim_n, f0, amplitude, snr_db, rng)
+            f0_trial = f0 + rng.uniform(-half_bin, half_bin)
+            sim_t, sim_x = synthetic_signal(fs, sim_n, f0_trial, amplitude, snr_db, rng)
             fft_res = fft_peak_detect_signal(sim_t, sim_x, fs, sim_cfg)
-            fft_error = abs(float(fft_res["refined_frequency_hz"]) - f0)
-            per_method["FFT peak"]["success"].append(fft_error <= tolerance)
+            fft_error = abs(float(fft_res["refined_frequency_hz"]) - f0_trial)
+            per_method["FFT peak"]["success"].append(bool(fft_res["detected"]) and fft_error <= tolerance)
             per_method["FFT peak"]["error"].append(fft_error)
 
             glrt_res = glrt_detect_signal(sim_t, sim_x, fs, sim_cfg)
-            glrt_error = abs(float(glrt_res["refined_frequency_hz"]) - f0)
+            glrt_error = abs(float(glrt_res["refined_frequency_hz"]) - f0_trial)
             per_method["GLRT"]["success"].append(bool(glrt_res["detected"]) and glrt_error <= tolerance)
             per_method["GLRT"]["error"].append(glrt_error)
 
