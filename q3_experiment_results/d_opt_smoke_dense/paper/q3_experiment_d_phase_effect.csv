@@ -1,0 +1,2 @@
+﻿snr_weak_db,amplitude_ratio_weak_to_strong,amplitude_ratio_value,separation_hz,runs,random_phase_average_success_rate,worst_phase_bin_success_rate,best_phase_bin_success_rate,phase_bin_count_used
+-6.0,1:1,1,0.002,1,1.0,nan,nan,0

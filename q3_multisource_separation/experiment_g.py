@@ -325,7 +325,7 @@ def main():
     t0 = time.perf_counter()
     workspace = Path(__file__).resolve().parents[1]
     data_path = locate_data(workspace)
-    out_dir = workspace / "q3_experiment_g_results"
+    out_dir = workspace / "q3_experiment_results" / "g"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("Experiment G: Sensitivity analysis")

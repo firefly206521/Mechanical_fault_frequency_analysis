@@ -44,6 +44,26 @@ _WORKER_FS = None
 _WORKER_CFG = None
 _WORKER_MAX_COMPONENTS = None
 _WORKER_BIC_DELTA = None
+_WORKER_FIT_BACKEND = None
+_WORKER_TIMING_DETAIL = None
+
+
+def _parse_float_list(text: str | None, default: tuple[float, ...]) -> tuple[float, ...]:
+    if text is None or not text.strip():
+        return default
+    return tuple(float(item.strip()) for item in text.split(",") if item.strip())
+
+
+def _parse_ratio_list(text: str | None, default: tuple[int, ...]) -> tuple[int, ...]:
+    if text is None or not text.strip():
+        return default
+    values = []
+    for item in text.split(","):
+        token = item.strip()
+        if not token:
+            continue
+        values.append(int(token.split(":")[-1]))
+    return tuple(values)
 
 
 def _rng(experiment_id: int, replicate: int) -> np.random.Generator:
@@ -86,9 +106,10 @@ def _read_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(handle))
 
 
-def _init_worker(t, fs, center_hz, weak_amplitude, grid_step_hz, conditional_threshold, detector, cfg, max_components, bic_delta) -> None:
+def _init_worker(t, fs, center_hz, weak_amplitude, grid_step_hz, conditional_threshold, detector, cfg, max_components, bic_delta, fit_backend, timing_detail) -> None:
     global _WORKER_T, _WORKER_FS, _WORKER_CENTER_HZ, _WORKER_WEAK_AMPLITUDE, _WORKER_GRID_STEP_HZ
     global _WORKER_CONDITIONAL_THRESHOLD, _WORKER_DETECTOR, _WORKER_CFG, _WORKER_MAX_COMPONENTS, _WORKER_BIC_DELTA
+    global _WORKER_FIT_BACKEND, _WORKER_TIMING_DETAIL
     _WORKER_T = t
     _WORKER_FS = fs
     _WORKER_CENTER_HZ = center_hz
@@ -99,6 +120,8 @@ def _init_worker(t, fs, center_hz, weak_amplitude, grid_step_hz, conditional_thr
     _WORKER_CFG = cfg
     _WORKER_MAX_COMPONENTS = max_components
     _WORKER_BIC_DELTA = bic_delta
+    _WORKER_FIT_BACKEND = fit_backend
+    _WORKER_TIMING_DETAIL = timing_detail
 
 
 def _signal(t: np.ndarray, frequencies: np.ndarray, amplitudes: np.ndarray, phases: np.ndarray) -> np.ndarray:
@@ -126,6 +149,7 @@ def _match_max_error(estimated: np.ndarray, truth: np.ndarray) -> float:
 
 
 def _trial_worker(task: tuple[float, int, float, int]) -> dict:
+    trial_started = time.perf_counter()
     snr_db, amplitude_ratio, separation_hz, replicate = task
     ratio_index = AMPLITUDE_RATIOS.index(amplitude_ratio)
     sep_index = SEPARATIONS_HZ.index(separation_hz)
@@ -141,8 +165,9 @@ def _trial_worker(task: tuple[float, int, float, int]) -> dict:
     weak_power = weak_amplitude ** 2 / 2.0
     noise_std = math.sqrt(weak_power / (10.0 ** (snr_db / 10.0)))
     observed = _signal(_WORKER_T, frequencies, amplitudes, phases) + rng.normal(0.0, noise_std, len(_WORKER_T))
+    signal_elapsed = time.perf_counter() - trial_started
 
-    started = time.perf_counter()
+    detector_started = time.perf_counter()
     if _WORKER_DETECTOR == "complete":
         fit, history = detect_multitone(
             _WORKER_T,
@@ -151,6 +176,7 @@ def _trial_worker(task: tuple[float, int, float, int]) -> dict:
             _WORKER_CFG,
             max_components=_WORKER_MAX_COMPONENTS,
             bic_delta=_WORKER_BIC_DELTA,
+            fit_backend=_WORKER_FIT_BACKEND,
         )
         estimated_k = int(len(fit["frequencies_hz"]))
         last_accept = next((row for row in reversed(history) if row.get("accepted")), {})
@@ -171,7 +197,7 @@ def _trial_worker(task: tuple[float, int, float, int]) -> dict:
         bic_improvement = float(fit.get("bic_improvement", float("nan")))
         conditional_statistic = float(fit.get("conditional_glrt_statistic", float("nan")))
         conditional_threshold = float(fit.get("conditional_glrt_threshold", float("nan")))
-    elapsed = time.perf_counter() - started
+    detector_elapsed = time.perf_counter() - detector_started
     estimated = np.asarray(fit["frequencies_hz"], float)
     tolerance = separation_hz / 4.0
     max_error = _match_max_error(estimated, frequencies)
@@ -183,7 +209,7 @@ def _trial_worker(task: tuple[float, int, float, int]) -> dict:
     )
     phase_diff = _phase_difference(phases)
     phase_bin = min(PHASE_BINS - 1, int(phase_diff / math.pi * PHASE_BINS))
-    return {
+    row = {
         "snr_weak_db": snr_db,
         "amplitude_ratio_weak_to_strong": f"1:{amplitude_ratio}",
         "amplitude_ratio_value": amplitude_ratio,
@@ -211,11 +237,19 @@ def _trial_worker(task: tuple[float, int, float, int]) -> dict:
         "conditional_glrt_threshold": conditional_threshold,
         "condition_design": float(fit["condition_design"]),
         "ill_conditioned": bool(fit["ill_conditioned"]),
-        "runtime_seconds": elapsed,
+        "runtime_seconds": detector_elapsed,
     }
+    if _WORKER_TIMING_DETAIL:
+        row.update({
+            "signal_generation_runtime_seconds": signal_elapsed,
+            "detector_runtime_seconds": detector_elapsed,
+            "trial_total_runtime_seconds": time.perf_counter() - trial_started,
+            "fit_backend": _WORKER_FIT_BACKEND,
+        })
+    return row
 
 
-def _run_stage(tasks: list[tuple[float, int, float, int]], worker: Callable, workers: int, path: Path) -> list[dict]:
+def _run_stage(tasks: list[tuple[float, int, float, int]], worker: Callable, workers: int, path: Path, chunksize: int) -> list[dict]:
     existing_rows = _read_csv(path)
     existing = {
         (float(row["snr_weak_db"]), int(float(row["amplitude_ratio_value"])), float(row["separation_hz"]), int(row["replicate"]))
@@ -258,18 +292,20 @@ def _run_stage(tasks: list[tuple[float, int, float, int]], worker: Callable, wor
                 _WORKER_CFG,
                 _WORKER_MAX_COMPONENTS,
                 _WORKER_BIC_DELTA,
+                _WORKER_FIT_BACKEND,
+                _WORKER_TIMING_DETAIL,
             ),
         ) as pool:
-            for count, row in enumerate(pool.map(worker, pending), 1):
+            for count, row in enumerate(pool.map(worker, pending, chunksize=max(1, chunksize)), 1):
                 record(row, count)
     return existing_rows + new_rows
 
 
-def _summarize_surface(rows: list[dict]) -> list[dict]:
+def _summarize_surface(rows: list[dict], snr_levels: tuple[float, ...], amplitude_ratios: tuple[int, ...], separations: tuple[float, ...]) -> list[dict]:
     summary = []
-    for snr_db in SNR_LEVELS_DB:
-        for ratio in AMPLITUDE_RATIOS:
-            for separation in SEPARATIONS_HZ:
+    for snr_db in snr_levels:
+        for ratio in amplitude_ratios:
+            for separation in separations:
                 group = [
                     row for row in rows
                     if float(row["snr_weak_db"]) == snr_db
@@ -298,11 +334,11 @@ def _summarize_surface(rows: list[dict]) -> list[dict]:
     return summary
 
 
-def _summarize_phase(rows: list[dict]) -> list[dict]:
+def _summarize_phase(rows: list[dict], snr_levels: tuple[float, ...], amplitude_ratios: tuple[int, ...], separations: tuple[float, ...]) -> list[dict]:
     summary = []
-    for snr_db in SNR_LEVELS_DB:
-        for ratio in AMPLITUDE_RATIOS:
-            for separation in SEPARATIONS_HZ:
+    for snr_db in snr_levels:
+        for ratio in amplitude_ratios:
+            for separation in separations:
                 group = [
                     row for row in rows
                     if float(row["snr_weak_db"]) == snr_db
@@ -343,10 +379,10 @@ def _empirical_limit(summary: list[dict], snr_db: float, ratio: int, target: flo
     return float("nan")
 
 
-def _summarize_limits(summary: list[dict], target: float) -> list[dict]:
+def _summarize_limits(summary: list[dict], target: float, snr_levels: tuple[float, ...], amplitude_ratios: tuple[int, ...]) -> list[dict]:
     rows = []
-    for snr_db in SNR_LEVELS_DB:
-        for ratio in AMPLITUDE_RATIOS:
+    for snr_db in snr_levels:
+        for ratio in amplitude_ratios:
             rows.append({
                 "snr_weak_db": snr_db,
                 "amplitude_ratio_weak_to_strong": f"1:{ratio}",
@@ -355,6 +391,40 @@ def _summarize_limits(summary: list[dict], target: float) -> list[dict]:
                 "empirical_resolution_limit_hz": _empirical_limit(summary, snr_db, ratio, target),
             })
     return rows
+
+
+def _mean_float(rows: list[dict], key: str) -> float:
+    values = [float(row[key]) for row in rows if key in row and row[key] not in ("", None)]
+    return float(np.mean(values)) if values else float("nan")
+
+
+def _summarize_timing(rows: list[dict], snr_levels: tuple[float, ...], amplitude_ratios: tuple[int, ...], separations: tuple[float, ...]) -> list[dict]:
+    summary = []
+    has_detail = any("trial_total_runtime_seconds" in row for row in rows)
+    for snr_db in snr_levels:
+        for ratio in amplitude_ratios:
+            for separation in separations:
+                group = [
+                    row for row in rows
+                    if float(row["snr_weak_db"]) == snr_db
+                    and int(float(row["amplitude_ratio_value"])) == ratio
+                    and abs(float(row["separation_hz"]) - separation) < 1e-12
+                ]
+                if not group:
+                    continue
+                summary.append({
+                    "snr_weak_db": snr_db,
+                    "amplitude_ratio_weak_to_strong": f"1:{ratio}",
+                    "amplitude_ratio_value": ratio,
+                    "separation_hz": separation,
+                    "runs": len(group),
+                    "mean_runtime_seconds": _mean_float(group, "runtime_seconds"),
+                    "mean_signal_generation_runtime_seconds": _mean_float(group, "signal_generation_runtime_seconds") if has_detail else float("nan"),
+                    "mean_detector_runtime_seconds": _mean_float(group, "detector_runtime_seconds") if has_detail else float("nan"),
+                    "mean_trial_total_runtime_seconds": _mean_float(group, "trial_total_runtime_seconds") if has_detail else float("nan"),
+                    "max_trial_total_runtime_seconds": max((float(row["trial_total_runtime_seconds"]) for row in group if "trial_total_runtime_seconds" in row), default=float("nan")),
+                })
+    return summary
 
 
 def _write_plots(paper_dir: Path, surface: list[dict], phase: list[dict]) -> list[Path]:
@@ -476,7 +546,7 @@ def _write_report(path: Path, context: dict) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Q3 Experiment D conditional close-frequency performance surface.")
-    parser.add_argument("--output-dir", type=Path, default=Path("q3_experiment_d_results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("q3_experiment_results/d"))
     parser.add_argument("--profile", choices=("smoke", "official"), default="official")
     parser.add_argument("--sample-count", type=int, default=40001)
     parser.add_argument("--fs", type=float, default=100.0)
@@ -491,19 +561,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bic-delta", type=float, default=10.0)
     parser.add_argument("--target-success", type=float, default=0.90)
     parser.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1))
+    parser.add_argument("--chunksize", type=int, default=1)
+    parser.add_argument("--fit-backend", choices=("dense", "cached"), default="cached")
+    parser.add_argument("--timing-detail", action="store_true")
+    parser.add_argument("--snr-levels", type=str, default=None)
+    parser.add_argument("--amplitude-ratios", type=str, default=None)
+    parser.add_argument("--separations", type=str, default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     global _WORKER_T, _WORKER_FS, _WORKER_CENTER_HZ, _WORKER_WEAK_AMPLITUDE, _WORKER_GRID_STEP_HZ
     global _WORKER_CONDITIONAL_THRESHOLD, _WORKER_DETECTOR, _WORKER_CFG, _WORKER_MAX_COMPONENTS, _WORKER_BIC_DELTA
+    global _WORKER_FIT_BACKEND, _WORKER_TIMING_DETAIL
     args = parse_args()
     default_runs = {"smoke": 3, "official": 200}[args.profile]
     runs = args.runs if args.runs is not None else default_runs
     if min(args.sample_count, runs, args.workers) < 1:
         raise ValueError("sample-count, runs, and workers must be positive")
+    if args.chunksize < 1:
+        raise ValueError("chunksize must be positive")
     if not (0.0 < args.target_success <= 1.0):
         raise ValueError("target-success must be in (0, 1]")
+    snr_levels = _parse_float_list(args.snr_levels, SNR_LEVELS_DB)
+    amplitude_ratios = _parse_ratio_list(args.amplitude_ratios, AMPLITUDE_RATIOS)
+    separations = _parse_float_list(args.separations, SEPARATIONS_HZ)
 
     output_dir = args.output_dir.resolve()
     paper_dir = output_dir / "paper"
@@ -521,6 +603,8 @@ def main() -> None:
     _WORKER_DETECTOR = args.detector
     _WORKER_MAX_COMPONENTS = args.max_components
     _WORKER_BIC_DELTA = args.bic_delta
+    _WORKER_FIT_BACKEND = args.fit_backend
+    _WORKER_TIMING_DETAIL = args.timing_detail
     cfg = GLRTConfig(
         f_min=0.05,
         f_max=min(49.5, args.fs / 2.0 - 0.5),
@@ -533,20 +617,23 @@ def main() -> None:
 
     tasks = [
         (snr_db, ratio, separation, replicate)
-        for snr_db in SNR_LEVELS_DB
-        for ratio in AMPLITUDE_RATIOS
-        for separation in SEPARATIONS_HZ
+        for snr_db in snr_levels
+        for ratio in amplitude_ratios
+        for separation in separations
         for replicate in range(runs)
     ]
     trial_path = raw_dir / "q3_experiment_d_trials.csv"
-    rows = _run_stage(tasks, _trial_worker, max(1, args.workers), trial_path)
+    rows = _run_stage(tasks, _trial_worker, max(1, args.workers), trial_path, args.chunksize)
 
-    surface_summary = _summarize_surface(rows)
-    phase_summary = _summarize_phase(rows)
-    limit_summary = _summarize_limits(surface_summary, args.target_success)
+    surface_summary = _summarize_surface(rows, snr_levels, amplitude_ratios, separations)
+    phase_summary = _summarize_phase(rows, snr_levels, amplitude_ratios, separations)
+    limit_summary = _summarize_limits(surface_summary, args.target_success, snr_levels, amplitude_ratios)
+    timing_summary = _summarize_timing(rows, snr_levels, amplitude_ratios, separations) if args.timing_detail else []
     _write_csv(paper_dir / "q3_experiment_d_success_surface.csv", surface_summary)
     _write_csv(paper_dir / "q3_experiment_d_resolution_limits.csv", limit_summary)
     _write_csv(paper_dir / "q3_experiment_d_phase_effect.csv", phase_summary)
+    if args.timing_detail:
+        _write_csv(raw_dir / "q3_experiment_d_timing_summary.csv", timing_summary)
     pngs = _write_plots(paper_dir, surface_summary, phase_summary)
 
     context = {
@@ -558,9 +645,9 @@ def main() -> None:
         "detector": args.detector,
         "weak_amplitude": args.weak_amplitude,
         "runs_per_cell": runs,
-        "snr_levels_db": list(SNR_LEVELS_DB),
-        "amplitude_ratios": [f"1:{value}" for value in AMPLITUDE_RATIOS],
-        "separations_hz": list(SEPARATIONS_HZ),
+        "snr_levels_db": list(snr_levels),
+        "amplitude_ratios": [f"1:{value}" for value in amplitude_ratios],
+        "separations_hz": list(separations),
         "phase_bins": PHASE_BINS,
         "grid_step_hz": args.grid_step_hz,
         "conditional_threshold": args.conditional_threshold,
@@ -570,16 +657,22 @@ def main() -> None:
         "bic_delta": args.bic_delta,
         "target_success": args.target_success,
         "workers": max(1, args.workers),
+        "chunksize": args.chunksize,
+        "fit_backend": args.fit_backend,
+        "timing_detail": args.timing_detail,
         "seed": SEED,
         "runtime_seconds": time.perf_counter() - started,
         "paper_pngs": [str(path.name) for path in pngs],
         "surface_summary": surface_summary,
         "phase_summary": phase_summary,
         "limit_summary": limit_summary,
+        "timing_summary": timing_summary,
         "command": sys.argv,
     }
     _write_report(paper_dir / "q3_experiment_d_report.md", context)
     (raw_dir / "q3_experiment_d_runtime.json").write_text(json.dumps(context, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.timing_detail:
+        (raw_dir / "q3_experiment_d_timing_summary.json").write_text(json.dumps(timing_summary, ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "README.md").write_text(
         "\n".join([
             "# Q3 Experiment D Results",

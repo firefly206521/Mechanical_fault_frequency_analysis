@@ -369,7 +369,7 @@ def _write_report(path: Path, context: dict) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Q3 Experiment C full SIC+BIC order calibration.")
-    parser.add_argument("--output-dir", type=Path, default=Path("q3_experiment_c_results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("q3_experiment_results/c"))
     parser.add_argument("--profile", choices=("smoke", "official"), default="official")
     parser.add_argument("--sample-count", type=int, default=40001)
     parser.add_argument("--fs", type=float, default=100.0)

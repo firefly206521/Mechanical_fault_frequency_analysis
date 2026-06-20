@@ -1,0 +1,38 @@
+[
+  {
+    "snr_weak_db": -6.0,
+    "amplitude_ratio_weak_to_strong": "1:1",
+    "amplitude_ratio_value": 1,
+    "separation_hz": 0.001,
+    "runs": 2,
+    "mean_runtime_seconds": 1.3250026499990781,
+    "mean_signal_generation_runtime_seconds": 0.005758350001997314,
+    "mean_detector_runtime_seconds": 1.3250026499990781,
+    "mean_trial_total_runtime_seconds": 1.3308153000034508,
+    "max_trial_total_runtime_seconds": 2.0378140000029816
+  },
+  {
+    "snr_weak_db": -6.0,
+    "amplitude_ratio_weak_to_strong": "1:1",
+    "amplitude_ratio_value": 1,
+    "separation_hz": 0.002,
+    "runs": 2,
+    "mean_runtime_seconds": 1.3798090499985847,
+    "mean_signal_generation_runtime_seconds": 0.006514799999422394,
+    "mean_detector_runtime_seconds": 1.3798090499985847,
+    "mean_trial_total_runtime_seconds": 1.3863915000001725,
+    "max_trial_total_runtime_seconds": 2.0498743999996805
+  },
+  {
+    "snr_weak_db": -6.0,
+    "amplitude_ratio_weak_to_strong": "1:1",
+    "amplitude_ratio_value": 1,
+    "separation_hz": 0.003,
+    "runs": 2,
+    "mean_runtime_seconds": 0.6721134500003245,
+    "mean_signal_generation_runtime_seconds": 0.0012762000005750451,
+    "mean_detector_runtime_seconds": 0.6721134500003245,
+    "mean_trial_total_runtime_seconds": 0.673440649999975,
+    "max_trial_total_runtime_seconds": 0.7213747999994666
+  }
+]

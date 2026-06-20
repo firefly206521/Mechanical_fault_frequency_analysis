@@ -173,13 +173,45 @@ def _multi_sse(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float]) -> fl
     return float(np.dot(residual, residual))
 
 
+def _sse_from_columns_cached(columns: list[np.ndarray], y: np.ndarray, rcond: float = 1e-12) -> float:
+    """Return least-squares SSE from precomputed columns without stacking rows."""
+    gram = np.empty((len(columns), len(columns)), dtype=float)
+    rhs = np.empty(len(columns), dtype=float)
+    for i, left in enumerate(columns):
+        rhs[i] = float(np.dot(left, y))
+        for j in range(i, len(columns)):
+            value = float(np.dot(left, columns[j]))
+            gram[i, j] = value
+            gram[j, i] = value
+    singular = np.linalg.svd(gram, compute_uv=False)
+    if singular[-1] <= rcond * singular[0]:
+        return float("inf")
+    beta = np.linalg.solve(gram, rhs)
+    yty = float(np.dot(y, y))
+    return float(max(yty - float(np.dot(rhs, beta)), 0.0))
+
+
+def _multi_sse_cached(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float]) -> float:
+    frequencies = np.asarray(list(frequencies), dtype=float)
+    tc = t - float(np.mean(t))
+    columns: list[np.ndarray] = []
+    for frequency in frequencies:
+        angle = 2.0 * np.pi * frequency * tc
+        columns.extend([np.sin(angle), np.cos(angle)])
+    columns.append(np.ones_like(t))
+    return _sse_from_columns_cached(columns, y)
+
+
 def refine_joint_frequencies(
     t: np.ndarray,
     y: np.ndarray,
     seeds: Iterable[float],
     half_width: float | Iterable[float] = 0.006,
     maxiter: int = 45,
+    fit_backend: str = "dense",
 ) -> dict:
+    if fit_backend not in {"dense", "cached"}:
+        raise ValueError("fit_backend must be 'dense' or 'cached'")
     seeds = np.sort(np.asarray(list(seeds), dtype=float))
     if len(seeds) == 0:
         return multi_harmonic_fit(t, y, [])
@@ -208,6 +240,8 @@ def refine_joint_frequencies(
                 candidate_columns = columns.copy()
                 candidate_columns[2 * index] = np.sin(angle)
                 candidate_columns[2 * index + 1] = np.cos(angle)
+                if fit_backend == "cached":
+                    return _sse_from_columns_cached([*candidate_columns, offset_column], y)
                 design = np.column_stack([*candidate_columns, offset_column])
                 beta, _, rank, _ = np.linalg.lstsq(design, y, rcond=1e-12)
                 if rank < design.shape[1]:
@@ -274,7 +308,10 @@ def detect_multitone(
     cfg: GLRTConfig,
     max_components: int = 10,
     bic_delta: float = 10.0,
+    fit_backend: str = "dense",
 ) -> tuple[dict, list[dict]]:
+    if fit_backend not in {"dense", "cached"}:
+        raise ValueError("fit_backend must be 'dense' or 'cached'")
     current = multi_harmonic_fit(t, y, [])
     history: list[dict] = []
     duration = float(t[-1] - t[0])
@@ -324,8 +361,9 @@ def detect_multitone(
                 new_index = int(np.argmin(np.abs(candidate - scan["peak_frequency_hz"])))
                 lo = max(cfg.f_min, candidate[new_index] - max(3.0 / duration, 0.003))
                 hi = min(cfg.f_max, candidate[new_index] + max(3.0 / duration, 0.003))
+                sse_func = _multi_sse_cached if fit_backend == "cached" else _multi_sse
                 candidate[new_index] = golden_minimize(
-                    lambda value: _multi_sse(t, y, np.sort(np.r_[candidate[:new_index], value, candidate[new_index + 1:]])),
+                    lambda value: sse_func(t, y, np.sort(np.r_[candidate[:new_index], value, candidate[new_index + 1:]])),
                     lo,
                     hi,
                     iterations=20,
@@ -333,7 +371,7 @@ def detect_multitone(
                 trial = multi_harmonic_fit(t, y, np.sort(candidate))
             else:
                 widths = np.full(len(seeds), max(3.0 / duration, 0.003))
-                trial = refine_joint_frequencies(t, y, seeds, widths)
+                trial = refine_joint_frequencies(t, y, seeds, widths, fit_backend=fit_backend)
             refined.append((trial["bic"], origin, trial))
         if not refined:
             record.update({"accepted": False, "stop_reason": "no valid candidate"})
