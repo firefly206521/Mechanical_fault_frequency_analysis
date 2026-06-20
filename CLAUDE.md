@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Before starting any task, scan for available skills with `Skill` — project-level `.claude/skills/` and user-level `~/.claude/skills/`. Invoke matching skills before writing code or running experiments.
+
 ## Project overview
 
 Mathematical modeling competition (2026 CSU A题): detect weak sinusoidal fault frequencies in strong noise, recover waveforms, separate multiple sources, and optimize sensor layout. Four questions, each implemented as an independent Python package.
