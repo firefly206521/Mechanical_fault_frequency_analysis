@@ -11,6 +11,17 @@ import numpy as np
 from ._io import write_csv
 
 
+BENCHMARK_LABELS = {
+    "v1_adaptive_best": "V1 解析最优",
+    "v1_adaptive_candidate": "V1 候选布局",
+    "v1_v0_region_baseline": "V0 区域基线",
+    "v1_random_three": "固定随机布局",
+    "v1_max_response_three": "最大响应三点",
+    "v1_spaced_three": "等间隔三点",
+    "v1_validated_best": "V1 MC 验证最优",
+}
+
+
 def _configure_chinese_font() -> None:
     font_paths = [
         Path("C:/Windows/Fonts/simhei.ttf"),
@@ -152,13 +163,60 @@ def write_plots(paper_dir: Path, context: dict) -> list[Path]:
     paths = [
         _plot_pd_curve(paper_dir / "q4_v1_pd_snr_curve.png", context),
         _plot_layout_heatmap(paper_dir / "q4_v1_layout_heatmap.png", context),
+        _plot_validated_layout_heatmap(paper_dir / "q4_v1_validated_layout_heatmap.png", context),
+        _plot_validated_pd_curve(paper_dir / "q4_v1_validated_pd_snr_curve.png", context),
     ]
     return paths
 
 
+def _legend_above(ax, ncol: int | None = None, fontsize: int = 9, y: float = 1.12) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    if ncol is None:
+        ncol = min(4, max(1, len(labels)))
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, y),
+        ncol=ncol,
+        frameon=False,
+        borderaxespad=0.0,
+        fontsize=fontsize,
+    )
+
+
+def _legend_right(ax, fontsize: int = 9) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    ax.legend(
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        frameon=False,
+        borderaxespad=0.0,
+        fontsize=fontsize,
+    )
+
+
+def _legend_below(ax, ncol: int | None = None, fontsize: int = 9) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    if ncol is None:
+        ncol = min(4, max(1, len(labels)))
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=ncol,
+        frameon=False,
+        borderaxespad=0.0,
+        fontsize=fontsize,
+    )
+
+
 def _plot_pd_curve(path: Path, context: dict) -> Path:
     rows = context["detection_summary"]
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(9, 5))
     labels = ["v1_adaptive_best", "v1_v0_region_baseline", "v1_random_three", "v1_max_response_three", "v1_spaced_three"]
     for label in labels:
         group = [row for row in rows if row["benchmark"] == label]
@@ -169,15 +227,14 @@ def _plot_pd_curve(path: Path, context: dict) -> Path:
             by_snr.setdefault(float(row["snr_db"]), []).append(float(row["pd_source_mean"]))
         xs = sorted(by_snr)
         ys = [float(np.mean(by_snr[x])) for x in xs]
-        ax.plot(xs, ys, marker="o", label=label.replace("v1_", "V1 "))
+        ax.plot(xs, ys, marker="o", linewidth=2.0, label=BENCHMARK_LABELS.get(label, label))
     ax.set_title("Q4 V1 检测概率-SNR 曲线")
     ax.set_xlabel("SNR (dB)")
     ax.set_ylabel("平均检测概率")
     ax.set_ylim(-0.02, 1.02)
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    fig.savefig(path, dpi=180)
+    _legend_right(ax, fontsize=9)
+    fig.savefig(path, dpi=220, bbox_inches="tight", pad_inches=0.10)
     plt.close(fig)
     return path
 
@@ -189,19 +246,112 @@ def _plot_layout_heatmap(path: Path, context: dict) -> Path:
         selected = set(context["selected_layout_rows"][0]["layout"].split("+"))
     xs = np.asarray([row["x"] for row in candidate_rows], dtype=float)
     ys = np.asarray([row["y"] for row in candidate_rows], dtype=float)
-    colors = np.asarray([row["response_abs_14Hz"] / max(row["noise_std"], 1e-12) for row in candidate_rows], dtype=float)
-    fig, ax = plt.subplots(figsize=(7, 5))
+    colors = np.asarray([float(row["response_abs_14Hz"]) / max(float(row["noise_std"]), 1e-12) for row in candidate_rows], dtype=float)
+    fig, ax = plt.subplots(figsize=(8, 5.4), constrained_layout=True)
     scatter = ax.scatter(xs, ys, c=colors, cmap="viridis", s=55, alpha=0.85, label="V1 候选点")
     chosen = [row for row in candidate_rows if row["point_id"] in selected]
     if chosen:
-        ax.scatter([row["x"] for row in chosen], [row["y"] for row in chosen], c="red", s=130, marker="*", label="V1 选中点")
-    ax.set_title("Q4 V1 候选点响应热力图")
+        ax.scatter([float(row["x"]) for row in chosen], [float(row["y"]) for row in chosen], c="red", s=130, marker="*", label="V1 选中点")
+    ax.set_title("Q4 V1 候选点响应热力图", pad=28)
     ax.set_xlabel("无量纲 x")
     ax.set_ylabel("无量纲 y")
-    ax.legend()
+    _legend_below(ax, ncol=2)
     fig.colorbar(scatter, ax=ax, label="14Hz 白化响应强度")
-    fig.tight_layout()
-    fig.savefig(path, dpi=180)
+    fig.savefig(path, dpi=220, bbox_inches="tight", pad_inches=0.10)
+    plt.close(fig)
+    return path
+
+
+def _point_ids_from_layout(layout: str) -> set[str]:
+    return {item.strip() for item in str(layout).split("+") if item.strip()}
+
+
+def _plot_validated_layout_heatmap(path: Path, context: dict) -> Path:
+    candidate_rows = context["candidate_rows"]
+    validated_rows = context.get("validated_layout_rows", [])
+    validated_best = validated_rows[0] if validated_rows else {}
+    selected = _point_ids_from_layout(validated_best.get("layout", ""))
+    xs = np.asarray([row["x"] for row in candidate_rows], dtype=float)
+    ys = np.asarray([row["y"] for row in candidate_rows], dtype=float)
+    colors = np.asarray([float(row["response_abs_14Hz"]) / max(float(row["noise_std"]), 1e-12) for row in candidate_rows], dtype=float)
+
+    fig, ax = plt.subplots(figsize=(8.6, 5.6), constrained_layout=True)
+    scatter = ax.scatter(xs, ys, c=colors, cmap="viridis", s=54, alpha=0.88, edgecolor="black", linewidth=0.25, label="候选测点")
+    chosen = [row for row in candidate_rows if row["point_id"] in selected]
+    if chosen:
+        ax.scatter(
+            [float(row["x"]) for row in chosen],
+            [float(row["y"]) for row in chosen],
+            c="#d62728",
+            s=115,
+            marker="o",
+            edgecolor="white",
+            linewidth=0.8,
+            label="MC 验证最优测点",
+            zorder=5,
+        )
+        for row in chosen:
+            ax.annotate(
+                row["point_id"].replace("v1_", ""),
+                (float(row["x"]), float(row["y"])),
+                xytext=(8, 4),
+                textcoords="offset points",
+                color="#b00000",
+                fontsize=9,
+                weight="bold",
+            )
+    ax.set_title("Q4 V1 Monte Carlo 验证最优布局", pad=28)
+    ax.set_xlabel("无量纲 x")
+    ax.set_ylabel("无量纲 y")
+    ax.grid(True, alpha=0.28)
+    _legend_below(ax, ncol=2)
+    colorbar = fig.colorbar(scatter, ax=ax)
+    colorbar.set_label("14Hz 白化响应强度")
+    fig.savefig(path, dpi=220, bbox_inches="tight", pad_inches=0.10)
+    plt.close(fig)
+    return path
+
+
+def _mean_pd_by_snr(rows: list[dict], layout: str) -> tuple[list[float], list[float]]:
+    group = [row for row in rows if row["layout"] == layout]
+    by_snr: dict[float, list[float]] = {}
+    for row in group:
+        by_snr.setdefault(float(row["snr_db"]), []).append(float(row["pd_source_mean"]))
+    xs = sorted(by_snr)
+    ys = [float(np.mean(by_snr[x])) for x in xs]
+    return xs, ys
+
+
+def _first_layout_for_benchmark(rows: list[dict], benchmark: str) -> str:
+    for row in rows:
+        if row["benchmark"] == benchmark:
+            return str(row["layout"])
+    return ""
+
+
+def _plot_validated_pd_curve(path: Path, context: dict) -> Path:
+    rows = context["detection_summary"]
+    validated_rows = context.get("validated_layout_rows", [])
+    best_layout = str(validated_rows[0]["layout"]) if validated_rows else ""
+    series = [
+        ("V1 MC 验证最优", best_layout),
+        ("固定随机布局", _first_layout_for_benchmark(rows, "v1_random_three")),
+        ("V0 区域基线", _first_layout_for_benchmark(rows, "v1_v0_region_baseline")),
+    ]
+    fig, ax = plt.subplots(figsize=(8.6, 5.2))
+    for label, layout in series:
+        if not layout:
+            continue
+        xs, ys = _mean_pd_by_snr(rows, layout)
+        if xs:
+            ax.plot(xs, ys, marker="o", linewidth=2.2, label=label)
+    ax.set_title("Q4 V1 检测概率-SNR 曲线（MC 验证布局）")
+    ax.set_xlabel("SNR (dB)")
+    ax.set_ylabel("平均故障源检测概率")
+    ax.set_ylim(-0.02, 1.02)
+    ax.grid(True, alpha=0.3)
+    _legend_right(ax)
+    fig.savefig(path, dpi=220, bbox_inches="tight", pad_inches=0.10)
     plt.close(fig)
     return path
 

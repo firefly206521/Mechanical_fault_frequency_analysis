@@ -89,12 +89,12 @@ def write_plots(
     resolution_summary: list[dict],
     fs: float,
 ) -> list[Path]:
-    zoom = t <= 10.0
+    zoom = t <= 2.0
     series = [("预处理信号", t[zoom], y[zoom], "#999999")]
     colors = ["#d62728", "#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b"]
     for index, component in enumerate(fit["components"]):
         series.append((f"分量{index + 1}: {component['frequency_hz']:.4f} Hz", t[zoom], component["waveform"][zoom], colors[index % len(colors)]))
-    line_svg(output_dir / "q3_time_separated_components.svg", "Q3 多故障源分离（前10 s）", "时间 (s)", "幅值", series)
+    line_svg(output_dir / "q3_time_separated_components.svg", "Q3 多故障源分离（前2 s）", "时间 (s)", "幅值", series)
 
     f1, p1 = spectrum(y, fs)
     _, p2 = spectrum(fit["residual"], fs)
