@@ -85,12 +85,12 @@
     "id": 9,
     "priority": "P1",
     "category": "引用错误",
-    "title": "MUSIC引用错为SSA专著golyandina2001ssa",
-    "detail": "paper.tex L397已改为\\upcite{schmidt1986music}，但refer.bib中缺少schmidt1986music条目。需在refer.bib中添加Schmidt(1986)的BibTeX条目。",
+    "title": "MUSIC引用错为SSA专著golyandina2001ssa → 已修复",
+    "detail": "paper.tex L397已改为\\upcite{schmidt1986music}，refer.bib已添加Schmidt(1986)的BibTeX条目。",
     "lines": ["L445"],
     "files": ["paper.tex", "refer.bib"],
-    "completed": false,
-    "note": "paper.tex引用已更正，refer.bib缺条目。纯文本修复——添加BibTeX即可，不需跑实验。"
+    "completed": true,
+    "note": "已完成。paper.tex引用和refer.bib条目均已就位。"
   },
   {
     "id": 10,
@@ -222,11 +222,11 @@
     "id": 24,
     "priority": "P2",
     "category": "结构",
-    "title": "graphicspath图路径指向不存在的目录",
-    "detail": "\\graphicspath当前为{../q1/figures/}{../q2/figures/}{../q3_multisource_separation_results_optimized_complete/}{../q4/figures/}{../../latex模板/figures/}。但q1/figures/和q2/figures/目录不存在——Q1图片在q1_glrt_results/和q1_results/，Q2图片在q2_harmonic_recovery_results/。需修正。",
+    "title": "graphicspath图路径指向不存在的目录 → 已修正",
+    "detail": "\\graphicspath已改为：{../q1_glrt_results/}{../q1_results/}{../q2_harmonic_recovery_results/}{../q3_multisource_separation_results_optimized_complete/}{../q4_sensor_layout_results/paper/}{../q4_sensor_layout_v1_results/paper/}。所有目录均存在且含所需的PNG文件。",
     "lines": ["L20"],
-    "completed": false,
-    "note": "纯路径修正，不需跑实验。q1/figures/→{../q1_glrt_results/}{../q1_results/}，q2/figures/→{../q2_harmonic_recovery_results/}，q4/figures/→{../q4_sensor_layout_results/paper/}。"
+    "completed": true,
+    "note": "已修复，Q1/Q2/Q3/Q4图路径全部指向实际存在的目录。"
   },
   {
     "id": 25,
@@ -241,11 +241,11 @@
     "id": 26,
     "priority": "P2",
     "category": "方法表述",
-    "title": "白噪声结论过强 → Q2需补充Ljung-Box和正态性检验显式数值",
-    "detail": "Q3残差诊断（L433）已有Jarque-Bera检验p>0.05。Q2残差（L303）报告了偏度/峰度/自相关但未显式给出Ljung-Box和Jarque-Bera的检验统计量。N=40001大样本下应同时报告量级和检验结果。",
+    "title": "白噪声结论过强 → Q2已补充Ljung-Box和Jarque-Bera显式数值",
+    "detail": "实验组F已完成。Q2残差：Jarque-Bera p=0.669，Ljung-Box(100) p=0.418，GLRT重扫描max T=17.46<<门限25.10，无任何频率检出。L303和噪声假设验证节均已补充完整统计量。",
     "lines": ["L343", "L344"],
-    "completed": false,
-    "note": "需对Q2残差计算LB(100)和JB统计量，在L303补充一行。属实验组F（可在已有Q2残差数据上快速计算，不依赖其他实验组）。"
+    "completed": true,
+    "note": "实验组F已完成。数据输出：q2_experiment_f_results/。"
   },
   {
     "id": 27,
@@ -260,11 +260,11 @@
     "id": 28,
     "priority": "P2",
     "category": "方法表述",
-    "title": "Q3近频条件数诊断对象不一致——表中条件数太低，需说明来自哪个矩阵",
-    "detail": "近频表中条件数范围1.00-1.53，与'频率越近条件数越大'的理论预期矛盾（Δf=0.001 Hz时仅1.12）。需在正文中明确条件数计算对象（如复基带归一化设计矩阵），否则读者会质疑。",
+    "title": "Q3近频条件数诊断对象不一致 → 已补充说明",
+    "detail": "近频表后已增加段落：条件数来自复基带归一化设计矩阵，归一化使矩阵以单位对角线为主、数值集中在1附近，故远低于原始设计矩阵。归一化后条件数更直接反映频率可区分性。",
     "lines": ["L439", "L441"],
-    "completed": false,
-    "note": "纯文本/代码说明问题。需在近频辨识段加一句说明条件数来自哪个矩阵、为什么数值这么低。"
+    "completed": true,
+    "note": "已完成。在近频辨识极限表中条件数最优后添加了解释段落。"
   },
   {
     "id": 29,
@@ -383,10 +383,10 @@
     "priority": "P1",
     "category": "完整性",
     "title": "Q3残差诊断完全缺失 → 已补充",
-    "detail": "L434-435已补充Q3残差白噪声诊断（偏度-0.010、超额峰度-0.009、自相关最大值0.0129、Jarque-Bera p>0.05），并诚实标注'模型仅解释了11.92%的总方差，剩余88%的方差中可能包含未被正弦模型捕捉的微弱结构'。",
-    "lines": ["L369", "L467（需在Q3章末增加）"],
+    "detail": "L436-437已补充完整Q3残差诊断：偏度-0.0143、超额峰度-0.00365、最大绝对ACF 0.01542（滞后21）、Ljung-Box Q(100)=86.43 p=0.8312、Jarque-Bera=1.382 p=0.5010。两项检验在5%水平下均不拒绝原假设。完整结果位于q3_multisource_separation_results_optimized_complete/q3_residual_diagnostics_experiment_e。",
+    "lines": ["L436", "L437"],
     "completed": true,
-    "note": "实验组B已完成；残差诊断数据来自optimized_complete目录的Q3分离结果，数值与paper.tex一致。"
+    "note": "实验组E已实际运行（codex在testA执行），已合并到shared_workspace。residual_diagnostics.py和完整输出文件已同步。"
   },
   {
     "id": 42,
@@ -448,11 +448,11 @@
     "id": 48,
     "priority": "P1",
     "category": "完整性",
-    "title": "Q2缺少'移除2 Hz后再次全频GLRT扫描'这个关键验证",
-    "detail": "L303已补充：'移除拟合的2 Hz分量后对残差再次执行全频GLRT扫描——残差中无任何频率通过门限，表明无被遗漏的显著周期分量。这一验证比仅依赖残差统计矩更为直接。'",
+    "title": "Q2 '移除2 Hz后GLRT再扫描'验证 → 已完成并证实",
+    "detail": "实验组F已运行GLRT重扫描：残差最大T(f)=17.46（f=18.53 Hz）远低于门限η=25.10，确认无遗漏周期分量。L303已补充max T(f)、门限、JB/LB统计量等完整结果。",
     "lines": ["L343（之前或之后插入）"],
-    "completed": false,
-    "note": "文本已写，但GLRT重扫描是否已实际执行并核实无频率通过门限？需代码运行确认（属实验组F）。"
+    "completed": true,
+    "note": "实验组F已完成并确认。数据输出：q2_experiment_f_results/。"
   },
   {
     "id": 49,
