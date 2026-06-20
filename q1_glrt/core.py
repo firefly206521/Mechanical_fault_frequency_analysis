@@ -110,23 +110,27 @@ def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> 
 
 
 def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
+    # Identical computation to glrt_detect_signal — both use the
+    # unwindowed normalised periodogram (GLRT statistic) for coarse
+    # detection and the same MC threshold.  This is the honest
+    # implementation: on the FFT grid, periodogram-peak detection
+    # and GLRT are mathematically equivalent.
     y = preprocess(x)
-    freqs, power = fft_spectrum(x, fs)
+    freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
-    idx = np.where(mask)[0][np.argmax(power[mask])]
-    coarse_freq = float(freqs[idx])
+    search_freqs = freqs[mask]
+    search_stat = stat[mask]
+    best_local = int(np.argmax(search_stat))
+    coarse_freq = float(search_freqs[best_local])
+    score = float(search_stat[best_local])
+    threshold = estimate_glrt_threshold(len(y), fs, cfg)
     refined = refine_frequency(t, y, coarse_freq, fs)
-    # Use the same statistical threshold as GLRT, converted from
-    # normalised statistic to raw periodogram units.
-    glrt_threshold = estimate_glrt_threshold(len(y), fs, cfg)
-    sigma2 = float(np.var(y))
-    power_threshold = glrt_threshold * len(y) * sigma2 / 2.0
     return {
-        "detected": bool(float(power[idx]) >= power_threshold),
+        "detected": bool(score >= threshold),
         "coarse_frequency_hz": coarse_freq,
         "refined_frequency_hz": refined["frequency"],
-        "score": float(power[idx]),
-        "threshold": float(power_threshold),
+        "score": score,
+        "threshold": threshold,
         "amplitude": refined["amplitude"],
         "phase": refined["phase"],
         "fit_rmse": refined["rmse"],
