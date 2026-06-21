@@ -55,6 +55,7 @@ def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
 
 
 def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
+    """Q1 GLRT 主流程：加载→去趋势→周期图扫描→MC 门限→频率精修→信号恢复。"""
     t, x, fs = load_q1_data(cfg)
     y = preprocess(x)
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
@@ -87,6 +88,7 @@ def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
 
 
 def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
+    """GLRT 检测：去趋势→归一化周期图→粗检峰→MC 门限判决→精修频率。"""
     y = preprocess(x)
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
@@ -110,11 +112,7 @@ def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> 
 
 
 def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
-    # Identical computation to glrt_detect_signal — both use the
-    # unwindowed normalised periodogram (GLRT statistic) for coarse
-    # detection and the same MC threshold.  This is the honest
-    # implementation: on the FFT grid, periodogram-peak detection
-    # and GLRT are mathematically equivalent.
+    """FFT 峰值法（与 GLRT 数学等价）：同一周期图、同一 MC 门限，二者检测结论一致。"""
     y = preprocess(x)
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
@@ -138,6 +136,7 @@ def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config)
 
 
 def recovered_signal(t: np.ndarray, x: np.ndarray, freq: float) -> np.ndarray:
+    """最小二乘重建正弦：在指定频率下拟合 sin/cos/offset，返回拟合波形。"""
     y = preprocess(x)
     omega_t = 2.0 * np.pi * freq * t
     design = np.column_stack([np.sin(omega_t), np.cos(omega_t), np.ones_like(t)])
@@ -146,6 +145,7 @@ def recovered_signal(t: np.ndarray, x: np.ndarray, freq: float) -> np.ndarray:
 
 
 def analyze_preprocessing_and_noise(cfg: Config, result: dict[str, float | bool | str]) -> pd.DataFrame:
+    """噪声诊断：计算 SNR、残差统计矩（偏度/峰度/自相关），验证白噪声假设。"""
     t, x, fs = load_q1_data(cfg)
     y = preprocess(x)
     s_hat = recovered_signal(t, x, float(result["refined_frequency_hz"]))
@@ -226,6 +226,7 @@ def run_fft_glrt_simulation(
     n: int,
     sim_mc: int,
 ) -> pd.DataFrame:
+    """Monte Carlo 对比仿真：在 −25 至 −5 dB 范围比较 FFT 与 GLRT 的检测概率。"""
     rng = np.random.default_rng(cfg.random_seed + 99)
     snr_values = [-25.0, -22.0, -20.0, -18.0, -15.0, -12.0, -10.0, -5.0]
     sim_n = n

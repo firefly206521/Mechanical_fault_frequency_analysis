@@ -91,6 +91,7 @@ def compute_bic(n: int, sse: float, parameter_count: int) -> float:
 
 
 def _design_matrix(t: np.ndarray, frequencies: Iterable[float]) -> tuple[np.ndarray, float]:
+    """构建多频设计矩阵：每频率一组 sin/cos 列 + offset 列，返回时间中心化矩阵。"""
     frequencies = np.asarray(list(frequencies), dtype=float)
     center = float(np.mean(t))
     tc = t - center
@@ -121,6 +122,7 @@ def design_diagnostics(design: np.ndarray, rcond: float = 1e-12) -> dict:
 
 
 def multi_harmonic_fit(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float]) -> dict:
+    """多频联合最小二乘：对给定频率集做多谐波回归，返回各分量参数、BIC 和条件数诊断。"""
     frequencies = np.sort(np.asarray(list(frequencies), dtype=float))
     design, center = _design_matrix(t, frequencies)
     beta, _, rank, _ = np.linalg.lstsq(design, y, rcond=1e-12)
@@ -210,6 +212,7 @@ def refine_joint_frequencies(
     maxiter: int = 45,
     fit_backend: str = "dense",
 ) -> dict:
+    """坐标下降联合精修：逐维黄金分割搜索，多轮迭代直至频率收敛或 maxiter 耗尽。"""
     if fit_backend not in {"dense", "cached"}:
         raise ValueError("fit_backend must be 'dense' or 'cached'")
     seeds = np.sort(np.asarray(list(seeds), dtype=float))
@@ -262,11 +265,9 @@ def refine_joint_frequencies(
 
 
 def glrt_scan(residual: np.ndarray, fs: float, cfg: GLRTConfig, fitted_parameter_count: int) -> dict:
+    """残差 GLRT 扫描：对当前残差计算周期图，定位最强剩余峰，用于 SIC 下一轮候选。"""
     frequencies, statistic = q1_compatible_glrt_stat(residual, fs)
     mask = (frequencies >= cfg.f_min) & (frequencies <= cfg.f_max)
-    # Q1's Monte Carlo threshold is calibrated on this unscaled statistic.
-    # Keeping the same scale makes every sequential iteration comparable to
-    # the cached threshold; fitted_parameter_count remains metadata only.
     corrected = statistic
     indexes = np.where(mask)[0]
     local = indexes[(corrected[indexes] >= np.roll(corrected, 1)[indexes]) & (corrected[indexes] > np.roll(corrected, -1)[indexes])]
@@ -310,6 +311,7 @@ def detect_multitone(
     bic_delta: float = 10.0,
     fit_backend: str = "dense",
 ) -> tuple[dict, list[dict]]:
+    """SIC+BIC 自动定阶：循环 {GLRT扫描残差→联合精修→BIC判据(Δ≥10)→接受/停止}。"""
     if fit_backend not in {"dense", "cached"}:
         raise ValueError("fit_backend must be 'dense' or 'cached'")
     current = multi_harmonic_fit(t, y, [])

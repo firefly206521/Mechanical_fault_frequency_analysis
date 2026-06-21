@@ -69,6 +69,7 @@ def phase_in_circular_ci(value: float, center: float, half_width: float) -> bool
 
 
 def harmonic_fit(t: np.ndarray, y: np.ndarray, frequency: float) -> dict:
+    """谐波回归：以时间中心化后的 sin/cos/offset 做最小二乘，返回振幅、相位、SSE。"""
     center = float(np.mean(t))
     tc = t - center
     angle = 2.0 * np.pi * frequency * tc
@@ -115,6 +116,7 @@ def golden_minimize(func, lo: float, hi: float, iterations: int = 55) -> float:
 
 
 def refine_frequency(t: np.ndarray, y: np.ndarray, initial: float, half_width: float = 0.01) -> dict:
+    """黄金分割精修：在初值 ±half_width 内最小化 SSE，无 scipy 依赖。"""
     frequency = golden_minimize(
         lambda f: harmonic_fit(t, y, f)["sse"],
         max(0.001, initial - half_width),
@@ -208,6 +210,7 @@ def model_applicability(t: np.ndarray, raw: np.ndarray, y: np.ndarray, fit: dict
 
 
 def parameter_covariance(t: np.ndarray, fit: dict) -> tuple[np.ndarray, np.ndarray]:
+    """参数协方差：解析 Jacobian 推导 σ²(JᵀJ)⁻¹，给出参数的标准误和相关系数。"""
     center = fit["center_time_s"]
     tc = t - center
     f = fit["frequency_hz"]
@@ -255,6 +258,7 @@ def bootstrap_parameters(t: np.ndarray, fit: dict, runs: int, seed: int) -> tupl
 
 
 def joint_segment_fit(t: np.ndarray, y: np.ndarray, initial_f: float, fs: float, segment_seconds: float = 50.0):
+    """分段频率恒定性检验：比较各段独立频率 vs 公共频率模型的 BIC，验证频率是否恒定。"""
     segment_len = int(round(segment_seconds * fs))
     segments = []
     dropped_samples = 0
@@ -557,6 +561,7 @@ def simulation_validation(
     runs_per_snr: int = 200,
     f_true: float = 2.0,
 ) -> list[dict]:
+    """合成数据 Monte Carlo 验证：评估频率/振幅/相位的偏差、RMSE 和 95% 区间覆盖率。"""
     rng = np.random.default_rng(seed + 100)
     t = np.arange(n, dtype=float) / fs
     rows = []

@@ -42,6 +42,7 @@ class Config:
 
 
 def load_single_source(data_path: Path) -> tuple[np.ndarray, np.ndarray, float]:
+    """读入"单源故障"工作表，校验列名，返回 (t, x, fs)。"""
     df = pd.read_excel(data_path, sheet_name=SHEET_SINGLE)
     if list(df.columns[:2]) != ["t", "x(t)"]:
         raise ValueError(f"Unexpected columns in {data_path}: {list(df.columns)}")
@@ -85,6 +86,7 @@ def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
 
 
 def estimate_sinusoid(t: np.ndarray, x: np.ndarray, freq: float) -> dict[str, float]:
+    """最小二乘正弦拟合：给定频率，估计 A, φ, offset，返回 RMSE 和可释方差。"""
     omega_t = 2.0 * np.pi * freq * t
     design = np.column_stack([np.sin(omega_t), np.cos(omega_t), np.ones_like(t)])
     coeffs, *_ = np.linalg.lstsq(design, x, rcond=None)
@@ -112,6 +114,7 @@ def refine_frequency(
     fs: float,
     half_width: float | None = None,
 ) -> dict[str, float]:
+    """有界一维精修：在粗峰 ±half_width 内最小化 RMSE，突破 FFT 栅格分辨率。"""
     if not np.isfinite(coarse_freq) or coarse_freq <= 0:
         return estimate_sinusoid(t, x, max(0.001, coarse_freq))
 
@@ -222,6 +225,7 @@ def model_cfar_fft(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict
 
 
 def glrt_stat_from_fft(x: np.ndarray, fs: float, cfg: Config) -> tuple[np.ndarray, np.ndarray]:
+    """归一化周期图：T(f) = 2|FFT|²/(Nσ²)，为 GLRT 检验统计量，在 FFT 栅格上计算。"""
     y = preprocess(x)
     spec = np.fft.rfft(y)
     freqs = np.fft.rfftfreq(len(y), d=1.0 / fs)
@@ -235,6 +239,7 @@ GLRT_THRESHOLD_CACHE: dict[tuple[int, float, float, float, float, int, int], flo
 
 
 def estimate_glrt_threshold(n: int, fs: float, cfg: Config) -> float:
+    """纯噪声 Monte Carlo 门限：模拟 N 次纯噪声，取 max T(f) 的 95% 分位数（LRU 缓存）。"""
     key = (
         n,
         round(fs, 9),
@@ -260,6 +265,7 @@ def estimate_glrt_threshold(n: int, fs: float, cfg: Config) -> float:
 
 
 def model_glrt(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """GLRT 模型入口：统计量→门限判决→精修→结果字典，供多模型对比表调用。"""
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(stat[mask])]

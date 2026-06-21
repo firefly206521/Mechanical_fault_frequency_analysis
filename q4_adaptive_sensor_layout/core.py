@@ -145,6 +145,7 @@ def _response_at(position: np.ndarray, normal: np.ndarray, region_index: int) ->
 
 
 def generate_candidate_points(grid_size: int, seed: int = SEED) -> list[CandidatePoint]:
+    """生成无量纲候选测点：6 区域 × N 环，含位置、法向量、噪声底和复传播响应。"""
     rng = np.random.default_rng(seed)
     centers = _region_centers()
     points: list[CandidatePoint] = []
@@ -246,6 +247,7 @@ def prescreen_points(points: list[CandidatePoint], cfg: Q4V1Config) -> tuple[lis
 
 
 def evaluate_layout(points: list[CandidatePoint], layout: Iterable[int], cfg: Q4V1Config | None = None) -> LayoutEvaluation:
+    """布局评分核心：白化响应→Fisher 信息启发式（特征值加权 + 迹 + 最小特征值 − 冗余惩罚）。"""
     if cfg is None:
         cfg = Q4V1Config()
     indexes = tuple(int(index) for index in layout)
@@ -295,6 +297,7 @@ def evaluate_layout(points: list[CandidatePoint], layout: Iterable[int], cfg: Q4
 
 
 def greedy_layout(points: list[CandidatePoint], candidate_indexes: list[int], size: int = 3, cfg: Q4V1Config | None = None) -> LayoutEvaluation:
+    """贪心搜索：逐点添加能最大提升评分的候选点，构建初始布局供后续交换优化。"""
     if len(candidate_indexes) < size:
         raise ValueError(f"greedy layout needs at least {size} candidate points")
     selected: list[int] = []
@@ -425,6 +428,7 @@ def synthesize_layout_samples(
     rng: np.random.Generator,
     cfg: Q4V1Config,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """合成多传感器数据：施加增益/相位随机扰动 + 相关噪声，模拟真实传播不确定性。"""
     noise_stds_all = noise_stds_for_snr(points, snr_db)
     noise_stds = noise_stds_all[list(layout)]
     responses = perturb_responses(response_matrix(points)[list(layout), :], rng, cfg)
@@ -455,6 +459,7 @@ def fused_statistics(stats: np.ndarray, noise_stds: np.ndarray) -> np.ndarray:
 
 @lru_cache(maxsize=512)
 def calibrated_threshold(layout_key: tuple[int, ...], noise_key: tuple[float, ...], cfg: Q4V1Config) -> float:
+    """MC 门限（LRU 缓存）：纯噪声下融合统计量 max 的 95% 分位数，控制虚警率。"""
     t = default_time_axis(cfg)
     sin_basis, cos_basis = basis_matrices(t)
     noise_stds = np.asarray(noise_key, dtype=float)
