@@ -1,0 +1,193 @@
+{
+  "profile": "smoke",
+  "sample_count": 40001,
+  "fs_hz": 100.0,
+  "duration_s": 400.0,
+  "center_hz": 5.0,
+  "detector": "complete",
+  "weak_amplitude": 0.01,
+  "runs_per_cell": 2,
+  "snr_levels_db": [
+    -6.0
+  ],
+  "amplitude_ratios": [
+    "1:1"
+  ],
+  "separations_hz": [
+    0.001,
+    0.002,
+    0.003
+  ],
+  "phase_bins": 8,
+  "grid_step_hz": 0.00025,
+  "conditional_threshold": null,
+  "glrt_mc": 500,
+  "glrt_threshold": 28.75649018066844,
+  "max_components": 4,
+  "bic_delta": 10.0,
+  "target_success": 0.9,
+  "workers": 2,
+  "chunksize": 2,
+  "fit_backend": "cached",
+  "timing_detail": true,
+  "seed": 20260620,
+  "runtime_seconds": 6.579418599998462,
+  "paper_pngs": [
+    "q3_experiment_d_phase_effect.png",
+    "q3_experiment_d_success_surface.png"
+  ],
+  "surface_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.001,
+      "rayleigh_multiples": 0.4,
+      "runs": 2,
+      "successes": 2,
+      "success_rate": 1.0,
+      "success_ci95_low": 0.34237195288961925,
+      "success_ci95_high": 1.0,
+      "mean_max_frequency_error_hz_if_success": 4.793337790331975e-05,
+      "median_condition_design": 2.7769037401863486,
+      "ill_conditioned_rate": 0.0,
+      "mean_runtime_seconds": 1.3250026499990781
+    },
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.002,
+      "rayleigh_multiples": 0.8,
+      "runs": 2,
+      "successes": 2,
+      "success_rate": 1.0,
+      "success_ci95_low": 0.34237195288961925,
+      "success_ci95_high": 1.0,
+      "mean_max_frequency_error_hz_if_success": 0.00017192564681511868,
+      "median_condition_design": 1.2478407869576313,
+      "ill_conditioned_rate": 0.0,
+      "mean_runtime_seconds": 1.3798090499985847
+    },
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.003,
+      "rayleigh_multiples": 1.2,
+      "runs": 2,
+      "successes": 2,
+      "success_rate": 1.0,
+      "success_ci95_low": 0.34237195288961925,
+      "success_ci95_high": 1.0,
+      "mean_max_frequency_error_hz_if_success": 2.069953351835352e-05,
+      "median_condition_design": 1.1753963334610034,
+      "ill_conditioned_rate": 0.0,
+      "mean_runtime_seconds": 0.6721134500003245
+    }
+  ],
+  "phase_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.001,
+      "runs": 2,
+      "random_phase_average_success_rate": 1.0,
+      "worst_phase_bin_success_rate": NaN,
+      "best_phase_bin_success_rate": NaN,
+      "phase_bin_count_used": 0
+    },
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.002,
+      "runs": 2,
+      "random_phase_average_success_rate": 1.0,
+      "worst_phase_bin_success_rate": NaN,
+      "best_phase_bin_success_rate": NaN,
+      "phase_bin_count_used": 0
+    },
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.003,
+      "runs": 2,
+      "random_phase_average_success_rate": 1.0,
+      "worst_phase_bin_success_rate": NaN,
+      "best_phase_bin_success_rate": NaN,
+      "phase_bin_count_used": 0
+    }
+  ],
+  "limit_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "success_standard": 0.9,
+      "empirical_resolution_limit_hz": 0.001
+    }
+  ],
+  "timing_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.001,
+      "runs": 2,
+      "mean_runtime_seconds": 1.3250026499990781,
+      "mean_signal_generation_runtime_seconds": 0.005758350001997314,
+      "mean_detector_runtime_seconds": 1.3250026499990781,
+      "mean_trial_total_runtime_seconds": 1.3308153000034508,
+      "max_trial_total_runtime_seconds": 2.0378140000029816
+    },
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.002,
+      "runs": 2,
+      "mean_runtime_seconds": 1.3798090499985847,
+      "mean_signal_generation_runtime_seconds": 0.006514799999422394,
+      "mean_detector_runtime_seconds": 1.3798090499985847,
+      "mean_trial_total_runtime_seconds": 1.3863915000001725,
+      "max_trial_total_runtime_seconds": 2.0498743999996805
+    },
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.003,
+      "runs": 2,
+      "mean_runtime_seconds": 0.6721134500003245,
+      "mean_signal_generation_runtime_seconds": 0.0012762000005750451,
+      "mean_detector_runtime_seconds": 0.6721134500003245,
+      "mean_trial_total_runtime_seconds": 0.673440649999975,
+      "max_trial_total_runtime_seconds": 0.7213747999994666
+    }
+  ],
+  "command": [
+    "E:\\AIworkspace\\2026CSU-math\\testA\\q3_multisource_separation\\run_q3_experiment_d.py",
+    "--profile",
+    "smoke",
+    "--runs",
+    "2",
+    "--workers",
+    "2",
+    "--chunksize",
+    "2",
+    "--output-dir",
+    "q3_experiment_results/d_opt_chunksize_2",
+    "--fit-backend",
+    "cached",
+    "--timing-detail",
+    "--snr-levels",
+    "-6",
+    "--amplitude-ratios",
+    "1",
+    "--separations",
+    "0.001,0.002,0.003"
+  ]
+}

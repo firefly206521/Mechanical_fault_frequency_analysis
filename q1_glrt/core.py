@@ -110,18 +110,27 @@ def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> 
 
 
 def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
+    # Identical computation to glrt_detect_signal — both use the
+    # unwindowed normalised periodogram (GLRT statistic) for coarse
+    # detection and the same MC threshold.  This is the honest
+    # implementation: on the FFT grid, periodogram-peak detection
+    # and GLRT are mathematically equivalent.
     y = preprocess(x)
-    freqs, power = fft_spectrum(x, fs)
+    freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
-    idx = np.where(mask)[0][np.argmax(power[mask])]
-    coarse_freq = float(freqs[idx])
+    search_freqs = freqs[mask]
+    search_stat = stat[mask]
+    best_local = int(np.argmax(search_stat))
+    coarse_freq = float(search_freqs[best_local])
+    score = float(search_stat[best_local])
+    threshold = estimate_glrt_threshold(len(y), fs, cfg)
     refined = refine_frequency(t, y, coarse_freq, fs)
     return {
-        "detected": True,
+        "detected": bool(score >= threshold),
         "coarse_frequency_hz": coarse_freq,
         "refined_frequency_hz": refined["frequency"],
-        "score": float(power[idx]),
-        "threshold": np.nan,
+        "score": score,
+        "threshold": threshold,
         "amplitude": refined["amplitude"],
         "phase": refined["phase"],
         "fit_rmse": refined["rmse"],
@@ -219,22 +228,24 @@ def run_fft_glrt_simulation(
 ) -> pd.DataFrame:
     rng = np.random.default_rng(cfg.random_seed + 99)
     snr_values = [-25.0, -22.0, -20.0, -18.0, -15.0, -12.0, -10.0, -5.0]
-    sim_n = min(n, 12000)
+    sim_n = n
     sim_cfg = Config(**{**cfg.__dict__, "glrt_mc": max(120, min(cfg.glrt_mc, 300))})
     rows = []
     tolerance = 0.05
 
     for snr_db in snr_values:
         per_method = {"FFT peak": {"success": [], "error": []}, "GLRT": {"success": [], "error": []}}
+        half_bin = fs / (2.0 * sim_n)  # random non-grid frequency offset per trial
         for _ in range(sim_mc):
-            sim_t, sim_x = synthetic_signal(fs, sim_n, f0, amplitude, snr_db, rng)
+            f0_trial = f0 + rng.uniform(-half_bin, half_bin)
+            sim_t, sim_x = synthetic_signal(fs, sim_n, f0_trial, amplitude, snr_db, rng)
             fft_res = fft_peak_detect_signal(sim_t, sim_x, fs, sim_cfg)
-            fft_error = abs(float(fft_res["refined_frequency_hz"]) - f0)
-            per_method["FFT peak"]["success"].append(fft_error <= tolerance)
+            fft_error = abs(float(fft_res["refined_frequency_hz"]) - f0_trial)
+            per_method["FFT peak"]["success"].append(bool(fft_res["detected"]) and fft_error <= tolerance)
             per_method["FFT peak"]["error"].append(fft_error)
 
             glrt_res = glrt_detect_signal(sim_t, sim_x, fs, sim_cfg)
-            glrt_error = abs(float(glrt_res["refined_frequency_hz"]) - f0)
+            glrt_error = abs(float(glrt_res["refined_frequency_hz"]) - f0_trial)
             per_method["GLRT"]["success"].append(bool(glrt_res["detected"]) and glrt_error <= tolerance)
             per_method["GLRT"]["error"].append(glrt_error)
 

@@ -74,9 +74,14 @@ def line_svg(path: Path, title: str, xlabel: str, ylabel: str, series: list[tupl
             px = x0 + (x - xmin) / max(xmax - xmin, 1e-30) * pw
             py = y0 + ph - (y - ymin) / max(ymax - ymin, 1e-30) * ph
             parts.extend(f'<circle cx="{a:.2f}" cy="{b:.2f}" r="4" fill="{color}"/>' for a, b in zip(px, py))
-        ly = 82 + idx * 22
-        parts += [f'<line x1="{x0+pw-190}" y1="{ly}" x2="{x0+pw-160}" y2="{ly}" stroke="{color}" stroke-width="3"/>',
-                  f'<text x="{x0+pw-150}" y="{ly+4}" font-family="Arial,Microsoft YaHei" font-size="13">{html.escape(name)}</text>']
+        n = len(clean)
+        per_row = max(1, (n + 2) // 3)
+        row = idx // per_row
+        col = idx % per_row
+        ly = 34 + row * 16
+        lx = 700 + col * 140
+        parts += [f'<line x1="{lx-22}" y1="{ly}" x2="{lx+2}" y2="{ly}" stroke="{color}" stroke-width="3"/>',
+                  f'<text x="{lx+8}" y="{ly+4}" font-family="Arial,Microsoft YaHei" font-size="13">{html.escape(name)}</text>']
     parts += [f'<text x="{x0+pw/2}" y="{H-20}" text-anchor="middle" font-family="Arial,Microsoft YaHei" font-size="15">{html.escape(xlabel)}</text>',
               f'<text x="22" y="{y0+ph/2}" transform="rotate(-90 22 {y0+ph/2})" text-anchor="middle" font-family="Arial,Microsoft YaHei" font-size="15">{html.escape(ylabel)}</text>',
               '</svg>']

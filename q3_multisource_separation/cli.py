@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import math
 import os
+import subprocess
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
@@ -151,6 +155,29 @@ def _bool(value) -> bool:
     return str(value).lower() == "true"
 
 
+def _git_metadata(workspace: Path) -> tuple[str, bool]:
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=workspace, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"], cwd=workspace, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip())
+        return commit, dirty
+    except (OSError, subprocess.CalledProcessError):
+        return "unavailable", True
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _progress(label: str, completed: int, target: int, started: float) -> None:
     elapsed = time.perf_counter() - started
     rate = elapsed / max(completed, 1)
@@ -260,6 +287,14 @@ def main() -> None:
 
     simulation_stage_started = time.perf_counter()
     simulation_rows = read_csv_rows(simulation_path)
+    configured_snr = set(SNR_LEVELS)
+    filtered_simulation_rows = [
+        row for row in simulation_rows
+        if float(row["snr_total_db"]) in configured_snr
+    ]
+    if len(filtered_simulation_rows) != len(simulation_rows):
+        simulation_rows = filtered_simulation_rows
+        write_csv(simulation_path, simulation_rows)
     if not args.skip_simulation:
         existing = {(float(row["snr_total_db"]), int(row["replicate"])) for row in simulation_rows}
         tasks = []
@@ -387,6 +422,32 @@ def main() -> None:
         f"png_count={len(png)}",
     ]
     (output_dir / "q3_runtime.txt").write_text("\n".join(runtime_lines) + "\n", encoding="utf-8")
+    git_commit, git_dirty = _git_metadata(workspace)
+    metadata = {
+        "authority": "q3 optimized complete",
+        "algorithm_commit": git_commit,
+        "working_tree_dirty": git_dirty,
+        "algorithm_files_sha256": {
+            name: _sha256(package_dir / name)
+            for name in ("core.py", "experiments.py", "cli.py", "outputs.py")
+        },
+        "random_seed": SEED,
+        "command": [sys.executable, "-m", "q3_multisource_separation.run_q3", *sys.argv[1:]],
+        "data_path": str(data_path),
+        "output_dir": str(output_dir),
+        "simulation_runs_per_snr": args.simulation_runs,
+        "snr_levels_db": list(SNR_LEVELS),
+        "resolution_runs_per_cell": args.resolution_runs,
+        "resolution_separations_hz": list(SEPARATIONS),
+        "resolution_amplitudes": {key: list(value) for key, value in AMPLITUDE_CASES.items()},
+        "extreme_runs_per_case": args.extreme_runs,
+        "extreme_cases": list(EXTREME_CASES),
+        "glrt_mc": args.glrt_mc,
+        "workers": workers,
+    }
+    (output_dir / "q3_run_metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+    )
     timing_rows = [
         {"stage": "load", "step": "read_and_detrend", "seconds": load_seconds, "n_calls": 1, "seconds_per_call": load_seconds, "description": "读取Excel并线性去趋势"},
         {"stage": "actual", "step": "detect_fit_segment", "seconds": actual_analysis_seconds, "n_calls": 1, "seconds_per_call": actual_analysis_seconds, "description": "真实数据GLRT、联合拟合和分段稳定性"},

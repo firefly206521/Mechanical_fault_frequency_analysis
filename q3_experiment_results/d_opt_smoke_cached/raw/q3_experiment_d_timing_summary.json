@@ -1,0 +1,14 @@
+[
+  {
+    "snr_weak_db": -6.0,
+    "amplitude_ratio_weak_to_strong": "1:1",
+    "amplitude_ratio_value": 1,
+    "separation_hz": 0.002,
+    "runs": 1,
+    "mean_runtime_seconds": 1.8193795999977738,
+    "mean_signal_generation_runtime_seconds": 0.0012310000020079315,
+    "mean_detector_runtime_seconds": 1.8193795999977738,
+    "mean_trial_total_runtime_seconds": 1.8206666999976733,
+    "max_trial_total_runtime_seconds": 1.8206666999976733
+  }
+]

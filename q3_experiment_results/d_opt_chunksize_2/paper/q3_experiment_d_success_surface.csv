@@ -1,0 +1,4 @@
+﻿snr_weak_db,amplitude_ratio_weak_to_strong,amplitude_ratio_value,separation_hz,rayleigh_multiples,runs,successes,success_rate,success_ci95_low,success_ci95_high,mean_max_frequency_error_hz_if_success,median_condition_design,ill_conditioned_rate,mean_runtime_seconds
+-6.0,1:1,1,0.001,0.4,2,2,1.0,0.34237195288961925,1.0,4.793337790331975e-05,2.7769037401863486,0.0,1.3250026499990781
+-6.0,1:1,1,0.002,0.8,2,2,1.0,0.34237195288961925,1.0,0.00017192564681511868,1.2478407869576313,0.0,1.3798090499985847
+-6.0,1:1,1,0.003,1.2,2,2,1.0,0.34237195288961925,1.0,2.069953351835352e-05,1.1753963334610034,0.0,0.6721134500003245

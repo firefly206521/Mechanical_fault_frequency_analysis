@@ -1,0 +1,2 @@
+﻿case,runs,count,rate,ci95_low,ci95_high
+K=0 pure noise final false alarm P(K_hat>=1),1000,0,0.0,0.0,0.003826898586390522

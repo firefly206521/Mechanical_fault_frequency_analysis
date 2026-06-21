@@ -1,0 +1,394 @@
+[
+  {
+    "id": "R1",
+    "priority": "P0",
+    "category": "数据与代码矛盾",
+    "title": "Q4 整章与 V1 数据脱节——以 V1 实际 CSV 重写，不需重跑实验",
+    "detail": "论文 L439–560 声称：144 候选点、评分权重 0.45/0.35/0.20/-2、最优布局“轴承左+齿轮左+输出轴”评分 0.6502。实际 V1 数据（q4_sensor_layout_v1_results_robustness_v2_medium/）：120 候选点、优化阶段权重 0.10/0.002/0.002/-0.03、验证排名阶段权重 0.45/0.35/0.20（注意：两阶段权重不同，论文只写了验证阶段的）、最优布局为 gearbox_zone_right+gearbox_zone_left+gearbox_zone_left（全部在齿轮箱区域），评分 0.5220。所有真实数字直接从以下 CSV 取：q4_v1_validated_layouts.csv（12 组布局排名/评分/P_D/P_FA）、q4_v1_selected_regions.csv（优化指标）、q4_v1_candidate_points.csv（120 候选点坐标）、q4_v1_robust_detection.csv（鲁棒性）。物理解释需诚实重写：齿轮箱区域对 4 个频率综合敏感度最高，三个测点虽在同一区域但不同子位置提供了足够空间分集。评分函数权重应明确区分优化阶段和验证排名阶段。",
+    "lines": ["L439–L560（Q4 整章）"],
+    "files": [
+      "paper/paper.tex（重写 Q4 整章，数字从以下 CSV 取）",
+      "q4_sensor_layout_v1_results_robustness_v2_medium/paper/q4_v1_validated_layouts.csv",
+      "q4_sensor_layout_v1_results_robustness_v2_medium/paper/q4_v1_selected_regions.csv",
+      "q4_sensor_layout_v1_results_robustness_v2_medium/paper/q4_v1_robust_detection.csv",
+      "q4_sensor_layout_v1_results_robustness_v2_medium/raw/q4_v1_candidate_points.csv"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R2",
+    "priority": "P0",
+    "category": "数据与代码矛盾",
+    "title": "Q1 摘要和正文声称 GLRT 显著优于 FFT——与实验数据和代码设计矛盾",
+    "detail": "摘要 L34“GLRT在极低SNR区间的检测概率和频率精度显著优于传统FFT峰值法”和正文 L219“GLRT的核心优势体现为…在低SNR下频率精度显著优于纯FFT峰值法”与实验数据直接矛盾。q1_fft_vs_glrt_simulation.csv 全部 8 个 SNR 水平下 FFT 和 GLRT 的频率误差完全相同（因为代码刻意使用相同统计量、相同门限、相同精修步骤）。q1_glrt/core.py:112-117 注释明确写“on the FFT grid, periodogram-peak detection and GLRT are mathematically equivalent”。GLRT 真正的价值在统计门限框架和连续频率精修能力，不是检测概率或频率精度更高。应诚实表述为：两者在 FFT 栅格上数学等价；GLRT 的独特贡献是蒙特卡洛统计门限和连续精修。",
+    "lines": ["L34（摘要 Q1 段）", "L219（正文）"],
+    "files": [
+      "paper/paper.tex",
+      "q1_glrt_results_n40001/q1_fft_vs_glrt_simulation.csv（证据：FFT 和 GLRT 每行数值完全相同）",
+      "q1_glrt/core.py:112-117（代码注释确认两者等价）"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R3",
+    "priority": "P0",
+    "category": "代码与论文不一致",
+    "title": "GLRT 统计量定义：论文写残差方差，代码用总方差",
+    "detail": "论文 L158–162 定义 T(f)=||P_f y||^2/sigma_hat^2，其中 sigma_hat^2=||y-P_f y||^2/(N-2) 为 H1 下残差方差。但代码 q1_model_compare.py:228 用 sigma2=float(np.var(y))（信号总方差）。两者不等价，因此论文不能再声称代码统计量服从 2F(2,N-2) 分布。蒙特卡洛门限仍然有效（门限与统计量一致），但理论推导和代码实现之间的差异必须诚实说明。",
+    "lines": ["L158–L162", "L170"],
+    "files": [
+      "paper/paper.tex",
+      "q1_model_compare.py:224-231"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R4",
+    "priority": "P0",
+    "category": "残留过时内容",
+    "title": "Q4 已完成后仍保留'完整 Q4 内容待补充'",
+    "detail": "L87 写“（注：本节目前为基于前三问的框架性分析，完整Q4内容待补充。）”。Q4 节已全部写就（L439–560，7 个小节），此标记过时且破坏全文状态一致性，必须删除。",
+    "lines": ["L87"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R5",
+    "priority": "P0",
+    "category": "数据未整合",
+    "title": "Q3 误报率只用首步 GLRT 0.20%——应替换为实验 C 完整流程结果",
+    "detail": "论文 L387 和 L630 仍写“纯噪声上首步GLRT扫描的经验误报率约为0.20%”。实验 C 已跑完完整 SIC+BIC 流程：K=0 纯噪声 1000 次 Monte Carlo，最终 P(K_hat>=1) = 0/1000 = 0.000%，95% CI [0%, 0.383%]。应替换为首步+完整流程双重报告，并诚实说明 0/1000 不代表真实误报概率为零（Wilson 上界 0.383%）。",
+    "lines": ["L387", "L630"],
+    "files": [
+      "paper/paper.tex",
+      "q3_experiment_results/c/paper/q3_experiment_c_null_false_alarm.csv"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R6",
+    "priority": "P0",
+    "category": "编译错误",
+    "title": "graphicspath 图片目录不存在——论文无法编译",
+    "detail": "L20 graphicspath 中引用的 q1_glrt_results/、q1_results/、q2_harmonic_recovery_results/、q3_multisource_separation_results_optimized_complete/ 等目录需逐项核实：图片文件是否确实在这些目录下，缺失的路径需修正或补图。Q4 的 graphicspath 需指向 q4_sensor_layout_v1_results_robustness_v2_medium/paper/。",
+    "lines": ["L20"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R7",
+    "priority": "P1",
+    "category": "数据与代码矛盾",
+    "title": "Q3 条件数解释错误——'复基带归一化'与代码实现不符",
+    "detail": "论文 L409 称近频表条件数来自“经复基带归一化（将两个频率移至基带并缩放时间轴）后设计矩阵”。代码 design_diagnostics()（core.py:105-119）实际做的是列归一化（design / column_norms 后做 SVD），不是复基带变换。应依据实际代码逻辑重写该段说明：条件数来自列归一化后的设计矩阵 SVD，归一化后的条件数更直接反映两列的正交程度。",
+    "lines": ["L409"],
+    "files": [
+      "paper/paper.tex",
+      "q3_multisource_separation/core.py:105-119"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R8",
+    "priority": "P1",
+    "category": "摘要与正文脱节",
+    "title": "Q2 覆盖率声称无正文表格支撑",
+    "detail": "摘要 L36“合成数据误差实验覆盖 SNR -20 至 -5 dB，所有参数覆盖率均超过 93.5%”，但正文 Q2 节没有对应的多 SNR 覆盖率表。q2_harmonic_recovery_results/q2_simulation_validation.csv 数据存在但未在正文呈现。应在 Q2 节补一张覆盖率表，或至少用 \\footnote 注明数据文件位置。",
+    "lines": ["L36（摘要 Q2 段）", "Q2 正文节"],
+    "files": [
+      "paper/paper.tex",
+      "q2_harmonic_recovery_results/q2_simulation_validation.csv"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R9",
+    "priority": "P1",
+    "category": "附录与代码脱节",
+    "title": "附录支撑材料路径全部虚构",
+    "detail": "附录 L665–701 使用 q1/code/、q2/code/、q3/code/、q4/code/ 等路径，但实际目录结构为：Q1=q1_glrt/和顶层 q1_model_compare.py、Q2=q2_harmonic_recovery/、Q3=q3_multisource_separation/、Q4=q4_adaptive_sensor_layout/。需修正所有路径为真实位置，或只保留文件名和描述。",
+    "lines": ["L665–L701"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R10",
+    "priority": "P1",
+    "category": "数据不一致",
+    "title": "Q1 和 Q2 的 SNR 值表述不一致",
+    "detail": "L72（Q1 分析）写“估计 SNR ≈ -12 dB”，L246（Q2 参数表）写“-12.083 dB”。统一为 -12.08 dB（来自 Q2 联合优化后的精确估计）。",
+    "lines": ["L72", "L246"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R11",
+    "priority": "P1",
+    "category": "数据与论文矛盾",
+    "title": "Q4 断言'噪声场相关性弱'与 V1 实验设置矛盾",
+    "detail": "L560 称“空间上相互远离，本地噪声场在这一尺度上相关性弱”。但 V1 鲁棒性实验 README 明确写了 noise_correlation=0.3。重写 Q4 时应根据实际选用的运行参数诚实报告。",
+    "lines": ["L560"],
+    "files": [
+      "paper/paper.tex",
+      "q4_sensor_layout_v1_results_robustness_v2_medium/README.md"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R12",
+    "priority": "P1",
+    "category": "精度不一致",
+    "title": "Q4 引用 Q3 频率用整数值——应保留 Q3 实际精度",
+    "detail": "L448 写“f=4, 8, 13, 14 Hz”。Q3 实际检测值为 3.999998, 7.999929, 13.000089, 14.000023 Hz。若 Q4 仿真使用了这些精确值，正文应写明；若使用了四舍五入值，也需说明。",
+    "lines": ["L448"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R13",
+    "priority": "P1",
+    "category": "表述不当",
+    "title": "Q4 '随机三传感器'只是一个指定布局——应诚实标注或重做随机抽样（可选实验）",
+    "detail": "论文 SNR 对比表将单个固定布局代表“随机三传感器”的期望性能。若不重跑实验，最低限度应诚实标注该布局为“单个随机抽取的三传感器布局（v1_random_three）”，不能声称代表随机策略总体。若要求严谨，应随机抽取 >=100 组三点组合并报告 P_D 的均值±SD 或中位数+IQR。",
+    "lines": ["L515–L516（SNR 对比表）"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": "（可选实验）从候选点中随机抽取 >=100 组三点组合，对每组运行完整检测仿真，报告 P_D 分布。若不跑，则将现有单个布局诚实标注为'单个随机抽取的三传感器布局'。"
+  },
+  {
+    "id": "R14",
+    "priority": "P1",
+    "category": "表述不当",
+    "title": "Q4 多处'误报率 0%'——有限仿真应报告置信区间",
+    "detail": "多处（L488、L509 等）报告“误报率 0%”。有限次数仿真（如 200 次）即使观测到 0 次误报，真实概率 95% 置信上界约 1.5-1.8%。所有二项比例必须报告 Wilson/binomial 置信区间。",
+    "lines": ["L488", "L508–L509", "L523"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R15",
+    "priority": "P1",
+    "category": "表述不当",
+    "title": "Q4 用'显著优于'但没有统计检验支撑",
+    "detail": "L523 多次使用“显著优于”。需报告比例差异检验（如 Fisher exact test）或至少报告各组检测概率的置信区间，由区间重叠程度判断差异是否“显著”。",
+    "lines": ["L523"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R16",
+    "priority": "P1",
+    "category": "不可复现",
+    "title": "Q4 关键模型参数未给出——读者无法复现",
+    "detail": "传播衰减指数、方向增益函数参数、模态效应系数、候选点网格坐标均未在论文中报告。读者无法根据论文复现 Q4 的任何数值结果。需从 V1 源码和 CSV 中提取这些参数，在论文中以表格形式报告。",
+    "lines": ["L441–L450"],
+    "files": ["paper/paper.tex", "q4_adaptive_sensor_layout/core.py", "q4_sensor_layout_v1_results_robustness_v2_medium/raw/q4_v1_candidate_points.csv"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R17",
+    "priority": "P1",
+    "category": "方法存疑",
+    "title": "Q4 对已归一化的 GLRT 统计量再次按噪声方差加权——需推导或实验验证",
+    "detail": "GLRT 统计量 T_m(f_k) 本身已按各测点噪声方差归一化。再次用 1/sigma_m^2 加权相当于双重归一化。需给出推导证明这种加权是最优融合策略，或用仿真比较加权融合 vs 简单平均的增益。",
+    "lines": ["L455–L458"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R18",
+    "priority": "P2",
+    "category": "实验未整合",
+    "title": "实验 D 条件性能曲面未写入正文——浪费已有数据",
+    "detail": "实验 D 已跑完完整的 3 SNR × 3 振幅比 × 10 Delta_f × 200 MC 条件性能曲面（q3_experiment_results/d/），但正文 L411 仍只用“经验辨识界限约 0.002 Hz”单一数字。应将实验 D 的曲面数据以表格或曲线图形式整合进正文 Q3 近频辨识节。",
+    "lines": ["L407–L411"],
+    "files": [
+      "paper/paper.tex",
+      "q3_experiment_results/d/paper/q3_experiment_d_success_surface.csv",
+      "q3_experiment_results/d/paper/q3_experiment_d_report.md"
+    ],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R19",
+    "priority": "P2",
+    "category": "实验不足",
+    "title": "参数敏感性分析只在峰值明显数据上运行——未覆盖检测边界（需要跑实验）",
+    "detail": "实验 G 只在真实多源数据（信号明确、K=4 稳定）上扫描。输出不变不能证明算法在检测边界附近（如 SNR=-15 dB 近频场景）对参数不敏感。应至少在一种边界场景上重复敏感性扫描。",
+    "lines": ["L569–L603（敏感性分析小节）"],
+    "files": [
+      "paper/paper.tex",
+      "q3_multisource_separation/experiment_g.py"
+    ],
+    "completed": true,
+    "requires_experiment": true,
+    "experiment_detail": "在 SNR ≈ -15 dB 的近频合成数据（如 Delta_f = 0.003 Hz 不等幅双频）上，重复 alpha/Delta_BIC/搜索半径的敏感性扫描，检验检测成功率对这些参数是否敏感。单次实验预计 ~5 分钟。"
+  },
+  {
+    "id": "R20",
+    "priority": "P2",
+    "category": "表述不当",
+    "title": "Q2 真实数据'恢复误差'只能由合成实验评价",
+    "detail": "真实数据没有无噪声真值 s(t)，因此残差 RMSE 不是对真值的恢复误差。论文中所有“恢复误差”相关表述应明确区分：(1)合成实验（有真值）→ 可报告 RMSE 和覆盖率；(2)真实数据 → 只能报告残差诊断和对照方法相关系数。",
+    "lines": ["L79", "L246"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R21",
+    "priority": "P2",
+    "category": "用词不当",
+    "title": "'超完备 K=8'用词不当——应为'八分量信号'",
+    "detail": "L427“超完备 K=8”暗示设计矩阵列数超过行数（超完备字典），但此处只是合成 8 个正弦分量叠加的混合信号。改为“八分量信号”准确且不引入压缩感知领域的歧义。",
+    "lines": ["L427"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R22",
+    "priority": "P2",
+    "category": "不可复现",
+    "title": "极端工况缺少关键参数——读者无法复现",
+    "detail": "L414–432 极端工况表缺少：脉冲噪声的冲击比例和强度、低频/高频边界测试的具体频率和振幅值、当前噪声标准差。读者无法从论文复现这些 100% 结果。需补充参数或引用代码文件。",
+    "lines": ["L414–L432"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R23",
+    "priority": "P2",
+    "category": "表述过度",
+    "title": "摘要过长且包含过度声称——应压缩",
+    "detail": "摘要占两页，应压缩为四段结构：(1)一句话问题背景；(2)每问一句话方法 + 关键数值结果；(3)方法链逻辑；(4)关键限制条件。删除所有“显著优于”“以极高置信度”“突破分辨率限制”等过度声称。",
+    "lines": ["L31–L44"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R24",
+    "priority": "P2",
+    "category": "表述过度",
+    "title": "多处措辞强于证据——需全篇弱化",
+    "detail": "“以极高置信度判定”(L187)、“突破栅格分辨率限制”(L183)、“验证了方案的工程稳定性”(L557)、“核心发现”“关键发现”“需明确指出”等提示语反复出现。应直接陈述数据事实，删除修饰性措辞。",
+    "lines": ["L183", "L187", "L434", "L523", "L557", "L599"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R25",
+    "priority": "P3",
+    "category": "格式",
+    "title": "敏感性分析表'精修搜索半径'行缺少 \\multirow",
+    "detail": "前三组参数正确使用 \\multirow{3}{*}{...} 实现垂直居中，'精修搜索半径 h / Hz' 行未使用 \\multirow，导致该行文本不会在 3 行间垂直居中。需补上 \\multirow{3}{*}{精修搜索半径 h / Hz}。",
+    "lines": ["L592"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R26",
+    "priority": "P3",
+    "category": "格式",
+    "title": "\\setCJKfamilyfont{zhsong} 定义后未使用——可删除",
+    "detail": "L28 定义了 zhsong 字体族但全文未引用。可安全删除。",
+    "lines": ["L28"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R27",
+    "priority": "P3",
+    "category": "内容",
+    "title": "L49 '双碳'政治引文与模型关联弱——建议删除",
+    "detail": "“党的二十大报告明确指出：积极稳妥推进碳达峰碳中和…”引文与信号检测模型无实质关联，且没有引用来源。建议删除或压缩为一句话。",
+    "lines": ["L49"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R28",
+    "priority": "P3",
+    "category": "内容",
+    "title": "符号 M 在题设和符号表中含义冲突",
+    "detail": "题设中 M 为分量数（x(t)=Sigma A_i sin(2pi f_i t + phi_i)），符号表 L121 又用 M 表示候选传感器数量。建议题设保留 M、传感器数量另取符号如 N_s 或 |S|。",
+    "lines": ["L67", "L121"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R29",
+    "priority": "P3",
+    "category": "内容",
+    "title": "L363 数据来源声明过时",
+    "detail": "写“本节所有数值统一来自 optimized_complete 目录”。但实验 C/D/G 数据在 q3_experiment_results/ 下，近频辨识节使用了实验 D 数据。应更新为准确的来源声明。",
+    "lines": ["L362–L363"],
+    "files": ["paper/paper.tex"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  },
+  {
+    "id": "R30",
+    "priority": "P2",
+    "category": "逻辑",
+    "title": "Q4 '传播阴影场景'缺乏定义和参数——不可复现",
+    "detail": "L553 列出“传播阴影”鲁棒性场景但未给出该场景的具体参数（哪个故障源到哪个测点衰减更强、衰减量级）。读者无法复现此场景的结果。需从 V1 源码中提取该场景的参数设置并写入论文。",
+    "lines": ["L553"],
+    "files": ["paper/paper.tex", "q4_adaptive_sensor_layout/experiments.py"],
+    "completed": true,
+    "requires_experiment": false,
+    "experiment_detail": null
+  }
+]

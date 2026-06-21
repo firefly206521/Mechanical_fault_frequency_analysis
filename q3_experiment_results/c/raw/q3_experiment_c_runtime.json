@@ -1,0 +1,116 @@
+{
+  "profile": "official",
+  "sample_count": 40001,
+  "fs_hz": 100.0,
+  "noise_std": 0.1,
+  "max_components": 10,
+  "single_step_p_fa": 0.005,
+  "glrt_mc": 500,
+  "glrt_threshold": 29.869678849094605,
+  "bic_delta": 10.0,
+  "workers": 8,
+  "seed": 20260620,
+  "null_runs": 1000,
+  "order_runs_per_k": 500,
+  "weak_runs_per_distance": 200,
+  "runtime_seconds": 438.56728459999795,
+  "null_summary": [
+    {
+      "case": "K=0 pure noise final false alarm P(K_hat>=1)",
+      "runs": 1000,
+      "count": 0,
+      "rate": 0.0,
+      "ci95_low": 0.0,
+      "ci95_high": 0.003826898586390522
+    }
+  ],
+  "order_summary": [
+    {
+      "true_k": 1,
+      "runs": 500,
+      "under_estimation_rate": 0.0,
+      "correct_order_rate": 1.0,
+      "correct_ci95_low": 0.9923753814690964,
+      "correct_ci95_high": 0.9999999999999999,
+      "over_estimation_rate": 0.0,
+      "mean_frequency_mae_hz_if_correct_k": 1.9666885946248768e-05
+    },
+    {
+      "true_k": 2,
+      "runs": 500,
+      "under_estimation_rate": 0.0,
+      "correct_order_rate": 1.0,
+      "correct_ci95_low": 0.9923753814690964,
+      "correct_ci95_high": 0.9999999999999999,
+      "over_estimation_rate": 0.0,
+      "mean_frequency_mae_hz_if_correct_k": 2.2481134803638447e-05
+    },
+    {
+      "true_k": 3,
+      "runs": 500,
+      "under_estimation_rate": 0.0,
+      "correct_order_rate": 1.0,
+      "correct_ci95_low": 0.9923753814690964,
+      "correct_ci95_high": 0.9999999999999999,
+      "over_estimation_rate": 0.0,
+      "mean_frequency_mae_hz_if_correct_k": 2.0534792597516855e-05
+    },
+    {
+      "true_k": 4,
+      "runs": 500,
+      "under_estimation_rate": 0.0,
+      "correct_order_rate": 1.0,
+      "correct_ci95_low": 0.9923753814690964,
+      "correct_ci95_high": 0.9999999999999999,
+      "over_estimation_rate": 0.0,
+      "mean_frequency_mae_hz_if_correct_k": 1.9900385816216227e-05
+    }
+  ],
+  "weak_summary": [
+    {
+      "weak_to_nearest_strong_distance_hz": 0.5,
+      "runs": 200,
+      "weak_detection_rate": 0.655,
+      "weak_detection_ci95_low": 0.5867546071792236,
+      "weak_detection_ci95_high": 0.7174031309860971,
+      "correct_order_rate": 0.655,
+      "over_estimation_rate": 0.0
+    },
+    {
+      "weak_to_nearest_strong_distance_hz": 1.0,
+      "runs": 200,
+      "weak_detection_rate": 0.675,
+      "weak_detection_ci95_low": 0.6073185684304498,
+      "weak_detection_ci95_high": 0.736085329498138,
+      "correct_order_rate": 0.675,
+      "over_estimation_rate": 0.0
+    },
+    {
+      "weak_to_nearest_strong_distance_hz": 2.0,
+      "runs": 200,
+      "weak_detection_rate": 0.68,
+      "weak_detection_ci95_low": 0.612479733946457,
+      "weak_detection_ci95_high": 0.7407357039229475,
+      "correct_order_rate": 0.68,
+      "over_estimation_rate": 0.0
+    },
+    {
+      "weak_to_nearest_strong_distance_hz": 5.0,
+      "runs": 200,
+      "weak_detection_rate": 0.695,
+      "weak_detection_ci95_low": 0.6280132012185453,
+      "weak_detection_ci95_high": 0.7546368564733095,
+      "correct_order_rate": 0.695,
+      "over_estimation_rate": 0.0
+    }
+  ],
+  "command": [
+    "E:\\AIworkspace\\2026CSU-math\\testA\\q3_multisource_separation\\run_q3_experiment_c.py",
+    "--profile",
+    "official",
+    "--workers",
+    "8",
+    "--output-dir",
+    "q3_experiment_c_results"
+  ]
+}

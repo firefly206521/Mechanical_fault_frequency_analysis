@@ -1,0 +1,111 @@
+{
+  "profile": "smoke",
+  "sample_count": 40001,
+  "fs_hz": 100.0,
+  "duration_s": 400.0,
+  "center_hz": 5.0,
+  "detector": "complete",
+  "weak_amplitude": 0.01,
+  "runs_per_cell": 1,
+  "snr_levels_db": [
+    -6.0
+  ],
+  "amplitude_ratios": [
+    "1:1"
+  ],
+  "separations_hz": [
+    0.002
+  ],
+  "phase_bins": 8,
+  "grid_step_hz": 0.00025,
+  "conditional_threshold": null,
+  "glrt_mc": 500,
+  "glrt_threshold": 28.75649018066844,
+  "max_components": 4,
+  "bic_delta": 10.0,
+  "target_success": 0.9,
+  "workers": 1,
+  "chunksize": 1,
+  "fit_backend": "cached",
+  "timing_detail": true,
+  "seed": 20260620,
+  "runtime_seconds": 3.8255644000018947,
+  "paper_pngs": [
+    "q3_experiment_d_phase_effect.png",
+    "q3_experiment_d_success_surface.png"
+  ],
+  "surface_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.002,
+      "rayleigh_multiples": 0.8,
+      "runs": 1,
+      "successes": 1,
+      "success_rate": 1.0,
+      "success_ci95_low": 0.20654329147389294,
+      "success_ci95_high": 1.0,
+      "mean_max_frequency_error_hz_if_success": 0.0001572292013793941,
+      "median_condition_design": 1.2215647951408874,
+      "ill_conditioned_rate": 0.0,
+      "mean_runtime_seconds": 1.8193795999977738
+    }
+  ],
+  "phase_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.002,
+      "runs": 1,
+      "random_phase_average_success_rate": 1.0,
+      "worst_phase_bin_success_rate": NaN,
+      "best_phase_bin_success_rate": NaN,
+      "phase_bin_count_used": 0
+    }
+  ],
+  "limit_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "success_standard": 0.9,
+      "empirical_resolution_limit_hz": 0.002
+    }
+  ],
+  "timing_summary": [
+    {
+      "snr_weak_db": -6.0,
+      "amplitude_ratio_weak_to_strong": "1:1",
+      "amplitude_ratio_value": 1,
+      "separation_hz": 0.002,
+      "runs": 1,
+      "mean_runtime_seconds": 1.8193795999977738,
+      "mean_signal_generation_runtime_seconds": 0.0012310000020079315,
+      "mean_detector_runtime_seconds": 1.8193795999977738,
+      "mean_trial_total_runtime_seconds": 1.8206666999976733,
+      "max_trial_total_runtime_seconds": 1.8206666999976733
+    }
+  ],
+  "command": [
+    "E:\\AIworkspace\\2026CSU-math\\testA\\q3_multisource_separation\\run_q3_experiment_d.py",
+    "--profile",
+    "smoke",
+    "--runs",
+    "1",
+    "--workers",
+    "1",
+    "--output-dir",
+    "q3_experiment_results/d_opt_smoke_cached",
+    "--fit-backend",
+    "cached",
+    "--timing-detail",
+    "--snr-levels",
+    "-6",
+    "--amplitude-ratios",
+    "1",
+    "--separations",
+    "0.002"
+  ]
+}
