@@ -1,0 +1,6 @@
+bootstrap_runs=10000
+bootstrap_seconds=0.015610
+simulation_runs_per_snr=200
+simulation_sample_count=40001
+ssa_best_window_points=2000
+total_seconds=44.545098

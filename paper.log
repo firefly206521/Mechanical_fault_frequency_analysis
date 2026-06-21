@@ -1,0 +1,32 @@
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.6.19)  21 JUN 2026 21:05
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**E:/AIworkspace/2026CSU-math/testA/paper/paper.tex
+(e:/AIworkspace/2026CSU-math/testA/paper/paper.tex
+LaTeX2e <2026-06-01>
+L3 programming layer <2026-05-26>
+
+! LaTeX Error: File `cumcmthesis.cls' not found.
+
+Type X to quit or <RETURN> to proceed,
+or enter new name. (Default extension: cls)
+
+Enter file name: 
+! Emergency stop.
+<read *> 
+         
+l.2 ^^M
+       
+*** (cannot \read from terminal in nonstop modes)
+
+ 
+Here is how much of TeX's memory you used:
+ 20 strings out of 467813
+ 500 string characters out of 5427155
+ 428017 words of memory out of 5000000
+ 29198 multiletter control sequences out of 15000+600000
+ 627721 words of font info for 40 fonts, out of 8000000 for 9000
+ 1348 hyphenation exceptions out of 8191
+ 19i,0n,29p,132b,17s stack positions out of 10000i,1000n,20000p,200000b,200000s
+No pages of output.
