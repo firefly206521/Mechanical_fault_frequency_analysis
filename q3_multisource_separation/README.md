@@ -9,7 +9,7 @@
 当前第三问权威结果目录为：
 
 ```text
-q3_multisource_separation_results_optimized
+q3_results
 ```
 
 优化前正式基线目录为：
@@ -36,7 +36,7 @@ q3_multisource_separation/.log/change/q3_stage_closeout_20260619.md
 从 `testA` 目录执行正式复验：
 
 ```powershell
-python -m q3_multisource_separation.run_q3 --simulation-runs 200 --resolution-runs 200 --null-runs 500 --extreme-runs 100 --workers 8 --output-dir q3_multisource_separation_results_optimized
+python -m q3_multisource_separation.run_q3 --simulation-runs 200 --resolution-runs 200 --null-runs 500 --extreme-runs 100 --workers 8 --output-dir q3_results
 ```
 
 也可以进入本目录执行：

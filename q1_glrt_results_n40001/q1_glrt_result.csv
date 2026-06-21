@@ -1,2 +1,0 @@
-﻿detected,coarse_frequency_hz,refined_frequency_hz,glrt_score,threshold,p_fa_target,amplitude_for_reference,phase_for_reference_rad,fit_rmse,fit_explained_var,sample_count,sampling_rate_hz,decision
-True,1.9999500012517875,2.0000015345118274,2328.6570660693483,25.104088427093526,0.05,0.0351903178835322,1.5736547822555682,0.10001364028429421,0.05829407361796568,40001,100.00000000009095,fault frequency detected

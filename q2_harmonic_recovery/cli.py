@@ -64,7 +64,7 @@ def main():
     package_dir = Path(__file__).resolve().parent
     workspace = package_dir.parent
     data_path = locate_data(workspace, args.data)
-    output_dir = (args.output_dir or workspace / "q2_harmonic_recovery_results").resolve()
+    output_dir = (args.output_dir or workspace / "q2_results").resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     started = time.perf_counter()

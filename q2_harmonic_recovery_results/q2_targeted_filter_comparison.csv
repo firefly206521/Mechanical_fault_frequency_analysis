@@ -1,6 +1,0 @@
-﻿metric,harmonic_regression,targeted_filter
-central_waveform_correlation,1.0,0.909648168238627
-central_rmse_to_harmonic_reference,0.0,0.011414564914232907
-edge_rmse_to_harmonic_reference,0.0,0.010856842047092101
-estimated_amplitude,0.0351903172365603,0.03650944702461039
-amplitude_difference,0.0,0.0013191297880500927

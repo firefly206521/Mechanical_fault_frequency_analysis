@@ -1,2 +1,0 @@
-﻿snr_weak_db,amplitude_ratio_weak_to_strong,amplitude_ratio_value,separation_hz,runs,mean_runtime_seconds,mean_signal_generation_runtime_seconds,mean_detector_runtime_seconds,mean_trial_total_runtime_seconds,max_trial_total_runtime_seconds
--6.0,1:1,1,0.002,1,1.9282388999999966,0.0012837000031140633,1.9282388999999966,1.9295714000036241,1.9295714000036241

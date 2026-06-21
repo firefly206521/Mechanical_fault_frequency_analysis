@@ -14,11 +14,11 @@ Mathematical modeling competition (2026 CSU A题): detect weak sinusoidal fault 
 
 | Question | Directory |
 |----------|-----------|
-| Q1 GLRT | `q1_glrt_results_n40001/` |
-| Q1 model compare | `q1_results_n40001/` |
-| Q2 | `q2_harmonic_recovery_results/` |
-| Q3 | `q3_multisource_separation_results_optimized/` |
-| Q4 V1 | `q4_sensor_layout_v1_results_robustness_v2_medium/` |
+| Q1 GLRT | `q1_glrt_results/` |
+| Q1 model compare | `q1_compare/` |
+| Q2 | `q2_results/` |
+| Q3 | `q3_results/` |
+| Q4 V1 | `q4_results/` |
 
 All superseded results: `_archived/`. Cleanup log: `.log/change/project_cleanup_archive_20260620.md`.
 
@@ -40,14 +40,14 @@ q{n}_*/experiments.py   # Monte Carlo simulations (Q3, Q4 only)
 
 ```powershell
 # Q1 — GLRT detection + FFT comparison
-python q1_glrt_model.py --data data.xlsx --output-dir q1_glrt_results_n40001 --sim-mc 200 --glrt-mc 500
-python q1_model_compare.py --data data.xlsx --output-dir q1_results_n40001 --sim-mc 80
+python q1_glrt_model.py --data data.xlsx --output-dir q1_glrt_results --sim-mc 200 --glrt-mc 500
+python q1_model_compare.py --data data.xlsx --output-dir q1_compare --sim-mc 80
 
 # Q2 — Harmonic waveform recovery (needs Q1 result as initial frequency)
 python q2_harmonic_recovery/run_q2.py --bootstrap-runs 10000 --simulation-runs 200
 
 # Q3 — Multi-source separation (SIC + BIC)
-python -m q3_multisource_separation.run_q3 --simulation-runs 200 --resolution-runs 200 --null-runs 500 --extreme-runs 100 --workers 8 --output-dir q3_multisource_separation_results_optimized
+python -m q3_multisource_separation.run_q3 --simulation-runs 200 --resolution-runs 200 --null-runs 500 --extreme-runs 100 --workers 8 --output-dir q3_results
 
 # Q4 V1 — Adaptive sensor layout
 python -m q4_adaptive_sensor_layout.run_q4_v1 --profile smoke

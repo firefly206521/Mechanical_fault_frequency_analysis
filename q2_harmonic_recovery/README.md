@@ -10,7 +10,7 @@ python run_q2.py --bootstrap-runs 10000 --simulation-runs 200
 
 程序自动读取相邻 `q1_glrt_results/q1_glrt_result.csv` 的第一问精修频率，并在找不到工作区内 `data.xlsx` 时读取上级赛题目录中的数据。
 
-输出写入相邻的 `q2_harmonic_recovery_results`。Bootstrap采用完整40001点数据的局部线性化参数法；多信噪比仿真也使用完整40001点，并重新生成时域数据、估计频率、振幅和相位。
+输出写入相邻的 `q2_results`。Bootstrap采用完整40001点数据的局部线性化参数法；多信噪比仿真也使用完整40001点，并重新生成时域数据、估计频率、振幅和相位。
 
 程序还包含两项稳健性分析：
 

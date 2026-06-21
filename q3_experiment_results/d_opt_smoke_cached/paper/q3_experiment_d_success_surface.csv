@@ -1,2 +1,0 @@
-﻿snr_weak_db,amplitude_ratio_weak_to_strong,amplitude_ratio_value,separation_hz,rayleigh_multiples,runs,successes,success_rate,success_ci95_low,success_ci95_high,mean_max_frequency_error_hz_if_success,median_condition_design,ill_conditioned_rate,mean_runtime_seconds
--6.0,1:1,1,0.002,0.8,1,1,1.0,0.20654329147389294,1.0,0.0001572292013793941,1.2215647951408874,0.0,1.8193795999977738

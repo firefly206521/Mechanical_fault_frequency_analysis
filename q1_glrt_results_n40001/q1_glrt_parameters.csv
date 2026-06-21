@@ -1,9 +1,0 @@
-﻿parameter,value,unit,meaning
-f_min,0.05,Hz,频率搜索下限
-f_max,49.5,Hz,频率搜索上限
-p_fa,0.05,-,目标误报率
-glrt_mc,500,runs,阈值 Monte Carlo 次数
-random_seed,20260619,-,随机种子
-preprocess,linear detrend,-,去直流和线性趋势
-refine_half_width,"max(3*fs/N, 0.01)",Hz,局部频率精修窗口
-success_tolerance,0.05,Hz,仿真成功判据的频率误差容限
