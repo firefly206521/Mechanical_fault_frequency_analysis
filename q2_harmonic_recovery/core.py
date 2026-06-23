@@ -55,6 +55,7 @@ def align_phase_to_reference(value: np.ndarray | float, reference: float) -> np.
 
 def phase_in_circular_ci(value: float, center: float, half_width: float) -> bool:
     """Check whether a wrapped phase value lies inside a circular CI."""
+    # [AI-1] 辅助实现相位圆周区间判断，代替直接对 wrapped phase 取分位数
     if half_width >= math.pi:
         return True
     value_wrapped = float(wrap_phase(value))
@@ -70,17 +71,18 @@ def phase_in_circular_ci(value: float, center: float, half_width: float) -> bool
 
 def harmonic_fit(t: np.ndarray, y: np.ndarray, frequency: float) -> dict:
     """谐波回归：以时间中心化后的 sin/cos/offset 做最小二乘，返回振幅、相位、SSE。"""
+    # [AI-1] 辅助时间中心化数值稳定设计
     center = float(np.mean(t))
     tc = t - center
     angle = 2.0 * np.pi * frequency * tc
-    design = np.column_stack([np.sin(angle), np.cos(angle), np.ones_like(t)])
+    design = np.column_stack([np.sin(angle), np.cos(angle), np.ones_like(t)])  # [AI-1] 辅助向量化设计矩阵
     beta = np.linalg.lstsq(design, y, rcond=None)[0]
     fit = design @ beta
     residual = y - fit
     a, b, offset = map(float, beta)
     amplitude = float(np.hypot(a, b))
     phase_center = float(math.atan2(b, a))
-    phase_origin = float(wrap_phase(phase_center - 2.0 * np.pi * frequency * center))
+    phase_origin = float(wrap_phase(phase_center - 2.0 * np.pi * frequency * center))  # [AI-1] 辅助还原相位至 t=0 原点
     return {
         "frequency_hz": float(frequency),
         "a_centered": a,
@@ -117,9 +119,10 @@ def golden_minimize(func, lo: float, hi: float, iterations: int = 55) -> float:
 
 def refine_frequency(t: np.ndarray, y: np.ndarray, initial: float, half_width: float = 0.01) -> dict:
     """黄金分割精修：在初值 ±half_width 内最小化 SSE，无 scipy 依赖。"""
+    # [AI-1] 辅助 golden-section 无导搜索替代 scipy 优化器
     frequency = golden_minimize(
         lambda f: harmonic_fit(t, y, f)["sse"],
-        max(0.001, initial - half_width),
+        max(0.001, initial - half_width),  # [AI-1] 辅助搜索下界裁剪至正频率
         initial + half_width,
     )
     return harmonic_fit(t, y, frequency)
@@ -174,6 +177,8 @@ def band_power_rows(x: np.ndarray, fs: float) -> list[dict]:
 
 
 def model_applicability(t: np.ndarray, raw: np.ndarray, y: np.ndarray, fit: dict, fs: float) -> tuple[list[dict], list[dict]]:
+    """残差诊断：统计矩、自相关、谱峰抑制、MCKD 触发判定。"""
+    # [AI-1] 辅助残差统计矩与谱诊断管线设计
     residual = fit["residual"]
     raw_m = moment_metrics(raw)
     residual_m = moment_metrics(residual)
@@ -211,6 +216,7 @@ def model_applicability(t: np.ndarray, raw: np.ndarray, y: np.ndarray, fit: dict
 
 def parameter_covariance(t: np.ndarray, fit: dict) -> tuple[np.ndarray, np.ndarray]:
     """参数协方差：解析 Jacobian 推导 σ²(JᵀJ)⁻¹，给出参数的标准误和相关系数。"""
+    # [AI-1] 辅助解析 Jacobian 构建与伪逆协方差估计
     center = fit["center_time_s"]
     tc = t - center
     f = fit["frequency_hz"]
@@ -220,12 +226,14 @@ def parameter_covariance(t: np.ndarray, fit: dict) -> tuple[np.ndarray, np.ndarr
     jacobian = np.column_stack([np.sin(angle), np.cos(angle), np.ones_like(tc), derivative_f])
     dof = max(len(t) - 4, 1)
     sigma2 = fit["sse"] / dof
-    covariance = sigma2 * np.linalg.pinv(jacobian.T @ jacobian)
+    covariance = sigma2 * np.linalg.pinv(jacobian.T @ jacobian)  # [AI-1] 辅助伪逆求解避免设计矩阵病态
     theta = np.asarray([a, b, fit["offset"], f], dtype=float)
     return theta, covariance
 
 
 def bootstrap_parameters(t: np.ndarray, fit: dict, runs: int, seed: int) -> tuple[list[dict], dict]:
+    """局部渐近正态抽样：多元正态 10000 次抽取参数区间，非残差 Bootstrap。"""
+    # [AI-1] 辅助实现协方差抽样与 bootstrap 术语修正（实为渐近正态近似）
     theta, covariance = parameter_covariance(t, fit)
     rng = np.random.default_rng(seed)
     draws = rng.multivariate_normal(theta, covariance, size=runs, check_valid="ignore")
@@ -259,6 +267,7 @@ def bootstrap_parameters(t: np.ndarray, fit: dict, runs: int, seed: int) -> tupl
 
 def joint_segment_fit(t: np.ndarray, y: np.ndarray, initial_f: float, fs: float, segment_seconds: float = 50.0):
     """分段频率恒定性检验：比较各段独立频率 vs 公共频率模型的 BIC，验证频率是否恒定。"""
+    # [AI-1] 辅助分段 BIC 比较框架与短段丢弃逻辑
     segment_len = int(round(segment_seconds * fs))
     segments = []
     dropped_samples = 0
@@ -269,7 +278,7 @@ def joint_segment_fit(t: np.ndarray, y: np.ndarray, initial_f: float, fs: float,
         else:
             dropped_samples += end - start
     if dropped_samples >= int(fs):
-        warnings.warn(
+        warnings.warn(  # [AI-1] 辅助添加短段丢弃 warning 提示
             f"Skipped {dropped_samples} sample(s) in short trailing segment(s) in joint_segment_fit.",
             RuntimeWarning,
             stacklevel=2,
@@ -286,7 +295,7 @@ def joint_segment_fit(t: np.ndarray, y: np.ndarray, initial_f: float, fs: float,
     independent_sse = 0.0
     for idx, (st, sy) in enumerate(segments, 1):
         common = harmonic_fit(st, sy, common_f)
-        independent = refine_frequency(st, sy, initial_f, half_width=max(3.0 * fs / len(st), 0.01))
+        independent = refine_frequency(st, sy, initial_f, half_width=max(3.0 * fs / len(st), 0.01))  # [AI-1] 辅助自适 half_width
         common_sse += common["sse"]
         independent_sse += independent["sse"]
         signal_power = float(np.mean(common["fit"] ** 2))
@@ -562,6 +571,7 @@ def simulation_validation(
     f_true: float = 2.0,
 ) -> list[dict]:
     """合成数据 Monte Carlo 验证：评估频率/振幅/相位的偏差、RMSE 和 95% 区间覆盖率。"""
+    # [AI-1] 辅助 5 级 SNR 扫描与 200 次 MC 试验编排
     rng = np.random.default_rng(seed + 100)
     t = np.arange(n, dtype=float) / fs
     rows = []
@@ -572,7 +582,7 @@ def simulation_validation(
             phi_true = rng.uniform(-np.pi, np.pi)
             truth = amplitude * np.sin(2.0 * np.pi * f_true * t + phi_true)
             signal_power = amplitude**2 / 2.0
-            noise_std = math.sqrt(signal_power / (10.0 ** (snr_db / 10.0)))
+            noise_std = math.sqrt(signal_power / (10.0 ** (snr_db / 10.0)))  # [AI-1] 辅助 SNR 逆推噪声标准差
             x = truth + rng.normal(0.0, noise_std, n)
             est = fast_frequency_estimate(t, x, fs, f_true)
             recovered = est["amplitude"] * np.sin(2.0 * np.pi * est["frequency_hz"] * t + est["phase_origin_rad"])
@@ -583,7 +593,7 @@ def simulation_validation(
             waveform_rmse.append(float(np.sqrt(np.mean((recovered - truth) ** 2))))
 
             theta, cov = parameter_covariance(t, est)
-            se_f = math.sqrt(max(cov[3, 3], 0.0))
+            se_f = math.sqrt(max(cov[3, 3], 0.0))  # [AI-1] 辅助协方差矩阵提取频率标准误
             a, b = est["a_centered"], est["b_centered"]
             A = max(est["amplitude"], 1e-15)
             grad_A = np.asarray([a / A, b / A, 0.0, 0.0])

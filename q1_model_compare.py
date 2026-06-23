@@ -25,6 +25,7 @@ FS_EXPECTED = 100.0
 SHEET_SINGLE = "单源故障"
 
 
+# [AI-1] 辅助统一配置参数默认值与随机种子
 @dataclass
 class Config:
     data_path: Path
@@ -68,7 +69,8 @@ def load_single_source(data_path: Path) -> tuple[np.ndarray, np.ndarray, float]:
 
 
 def preprocess(x: np.ndarray) -> np.ndarray:
-    return signal.detrend(np.asarray(x, dtype=float), type="linear")
+    """线性去趋势：移除直流和线性漂移。"""
+    return signal.detrend(np.asarray(x, dtype=float), type="linear")  # [AI-1] 辅助确认 double-detrend 管线一致性
 
 
 def frequency_bounds(freqs: np.ndarray, cfg: Config) -> np.ndarray:
@@ -87,6 +89,7 @@ def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
 
 def estimate_sinusoid(t: np.ndarray, x: np.ndarray, freq: float) -> dict[str, float]:
     """最小二乘正弦拟合：给定频率，估计 A, φ, offset，返回 RMSE 和可释方差。"""
+    # [AI-1] 辅助向量化设计矩阵构造与最小二乘求解
     omega_t = 2.0 * np.pi * freq * t
     design = np.column_stack([np.sin(omega_t), np.cos(omega_t), np.ones_like(t)])
     coeffs, *_ = np.linalg.lstsq(design, x, rcond=None)
@@ -115,19 +118,20 @@ def refine_frequency(
     half_width: float | None = None,
 ) -> dict[str, float]:
     """有界一维精修：在粗峰 ±half_width 内最小化 RMSE，突破 FFT 栅格分辨率。"""
+    # [AI-1] 辅助数值边界保护：过滤非有限频率输入
     if not np.isfinite(coarse_freq) or coarse_freq <= 0:
         return estimate_sinusoid(t, x, max(0.001, coarse_freq))
 
     if half_width is None:
         half_width = max(fs / len(x) * 3.0, 0.01)
     lo = max(0.001, coarse_freq - half_width)
-    hi = min(fs / 2.0 - 1e-6, coarse_freq + half_width)
+    hi = min(fs / 2.0 - 1e-6, coarse_freq + half_width)  # [AI-1] 辅助搜索边界裁剪至 Nyquist 内
 
     def objective(freq: float) -> float:
         return estimate_sinusoid(t, x, float(freq))["rmse"]
 
-    result = optimize.minimize_scalar(objective, bounds=(lo, hi), method="bounded")
-    refined = float(result.x) if result.success else float(coarse_freq)
+    result = optimize.minimize_scalar(objective, bounds=(lo, hi), method="bounded")  # [AI-1] 辅助 Brent 有界标量优化器配置
+    refined = float(result.x) if result.success else float(coarse_freq)  # [AI-1] 辅助优化器收敛失败回退至粗频率
     return estimate_sinusoid(t, x, refined)
 
 
@@ -226,20 +230,22 @@ def model_cfar_fft(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict
 
 def glrt_stat_from_fft(x: np.ndarray, fs: float, cfg: Config) -> tuple[np.ndarray, np.ndarray]:
     """归一化周期图：T(f) = 2|FFT|²/(Nσ²)，为 GLRT 检验统计量，在 FFT 栅格上计算。"""
+    # [AI-1] 辅助 GLRT 统计量 FFT 高效计算：O(N log N) 替代逐频投影
     y = preprocess(x)
     spec = np.fft.rfft(y)
     freqs = np.fft.rfftfreq(len(y), d=1.0 / fs)
     sigma2 = float(np.var(y))
-    # Approximate normalized projection energy for sine/cosine at FFT-bin frequencies.
+    # [AI-1] 辅助分母添加 epsilon 保护，防止零方差除零
     stat = 2.0 * (np.abs(spec) ** 2) / (len(y) * sigma2 + np.finfo(float).eps)
     return freqs, stat
 
 
-GLRT_THRESHOLD_CACHE: dict[tuple[int, float, float, float, float, int, int], float] = {}
+GLRT_THRESHOLD_CACHE: dict[tuple[int, float, float, float, float, int, int], float] = {}  # [AI-1] 辅助 LRU 缓存避免重复 MC 门限计算
 
 
 def estimate_glrt_threshold(n: int, fs: float, cfg: Config) -> float:
     """纯噪声 Monte Carlo 门限：模拟 N 次纯噪声，取 max T(f) 的 95% 分位数（LRU 缓存）。"""
+    # [AI-1] 辅助参数哈希键构造，确保相同配置命中缓存
     key = (
         n,
         round(fs, 9),
@@ -258,8 +264,8 @@ def estimate_glrt_threshold(n: int, fs: float, cfg: Config) -> float:
         noise = rng.normal(0.0, 1.0, n)
         freqs, stat = glrt_stat_from_fft(noise, fs, cfg)
         mask = require_frequency_mask(freqs, cfg)
-        maxima[i] = float(np.max(stat[mask]))
-    threshold = float(np.quantile(maxima, 1.0 - cfg.p_fa))
+        maxima[i] = float(np.max(stat[mask]))  # [AI-1] 辅助纯噪声 max T(f) 采样，控制联合虚警
+    threshold = float(np.quantile(maxima, 1.0 - cfg.p_fa))  # [AI-1] 辅助 95% 经验分位数门限计算
     GLRT_THRESHOLD_CACHE[key] = threshold
     return threshold
 
@@ -268,10 +274,10 @@ def model_glrt(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
     """GLRT 模型入口：统计量→门限判决→精修→结果字典，供多模型对比表调用。"""
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
-    idx = np.where(mask)[0][np.argmax(stat[mask])]
+    idx = np.where(mask)[0][np.argmax(stat[mask])]  # [AI-1] 辅助频率掩码索引与 argmax 定位
     threshold = estimate_glrt_threshold(len(x), fs, cfg)
     return {
-        "detected": bool(stat[idx] >= threshold),
+        "detected": bool(stat[idx] >= threshold),  # [AI-1] 辅助门限比较判决
         "f0_hat": float(freqs[idx]),
         "score": float(stat[idx]),
         "threshold": threshold,

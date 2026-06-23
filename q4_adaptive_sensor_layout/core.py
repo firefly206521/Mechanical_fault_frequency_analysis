@@ -31,6 +31,7 @@ REGION_NAMES = (
 )
 
 
+# [AI-1] 辅助 V1 配置参数默认值统一与评分权重设计
 @dataclass(frozen=True)
 class Q4V1Config:
     fs: float = 100.0
@@ -47,7 +48,7 @@ class Q4V1Config:
     weight_redundancy: float = -0.03
     eig_regularization: float = 1e-8
     similarity_floor: float = 1e-12
-    swap_max_iter_factor: int = 3
+    swap_max_iter_factor: int = 3  # [AI-1] 辅助 swap 迭代上限防止死循环
     response_gain_jitter: float = 0.0
     response_phase_jitter: float = 0.0
     noise_correlation: float = 0.0
@@ -131,6 +132,8 @@ def _surface_normal(position: np.ndarray) -> np.ndarray:
 
 
 def _response_at(position: np.ndarray, normal: np.ndarray, region_index: int) -> np.ndarray:
+    """复响应计算：距离衰减 + 方向增益 + 模态耦合 + 相位延迟。"""
+    # [AI-1] 辅助复响应向量化计算，含四个物理因子乘积
     sources = _source_locations()
     response = np.zeros(len(DEFAULT_FREQUENCIES), dtype=complex)
     for fault_index, frequency in enumerate(DEFAULT_FREQUENCIES):
@@ -220,6 +223,8 @@ def response_similarity(a: np.ndarray, b: np.ndarray, floor: float = 1e-12) -> f
 
 
 def prescreen_points(points: list[CandidatePoint], cfg: Q4V1Config) -> tuple[list[int], list[dict]]:
+    """白化响应预筛选：按评分排序，剔除冗余点，保留互补低频噪点。"""
+    # [AI-1] 辅助白化响应余弦相似度冗余剔除 + 区域兜底逻辑
     scores = point_scores(points)
     installable = [row for row in scores if row["installable"]]
     installable.sort(key=lambda row: row["score"], reverse=True)
@@ -248,6 +253,7 @@ def prescreen_points(points: list[CandidatePoint], cfg: Q4V1Config) -> tuple[lis
 
 def evaluate_layout(points: list[CandidatePoint], layout: Iterable[int], cfg: Q4V1Config | None = None) -> LayoutEvaluation:
     """布局评分核心：白化响应→Fisher 信息启发式（特征值加权 + 迹 + 最小特征值 − 冗余惩罚）。"""
+    # [AI-1] 辅助解析评分 J_ana：融合 GLRT 检测代理 + 逆噪声方差加权 + 冗余度归一化
     if cfg is None:
         cfg = Q4V1Config()
     indexes = tuple(int(index) for index in layout)
@@ -321,7 +327,7 @@ def one_swap_search(points: list[CandidatePoint], candidate_indexes: list[int], 
     best = initial
     improved = True
     iteration = 0
-    max_iter = max(1, cfg.swap_max_iter_factor * len(candidate_indexes) * max(1, len(initial.layout)))
+    max_iter = max(1, cfg.swap_max_iter_factor * len(candidate_indexes) * max(1, len(initial.layout)))  # [AI-1] 辅助 max_iter 上限防止无限循环
     while improved and iteration < max_iter:
         iteration += 1
         improved = False
@@ -339,7 +345,7 @@ def one_swap_search(points: list[CandidatePoint], candidate_indexes: list[int], 
             if improved:
                 break
     if improved:
-        warnings.warn("Q4 V1 one_swap_search reached max_iter before convergence", RuntimeWarning, stacklevel=2)
+        warnings.warn("Q4 V1 one_swap_search reached max_iter before convergence", RuntimeWarning, stacklevel=2)  # [AI-1] 辅助添加收敛警告
     return best
 
 
@@ -397,6 +403,8 @@ def noise_stds_for_snr(points: list[CandidatePoint], snr_db: float) -> np.ndarra
 
 
 def generate_noise(noise_stds: np.ndarray, sample_count: int, rng: np.random.Generator, correlation: float = 0.0) -> np.ndarray:
+    """相关高斯噪声生成：独立分量 + 共享分量按 ρ 加权混合。"""
+    # [AI-1] 辅助等相关系数 ρ=0.30 噪声模型实现
     if not 0.0 <= correlation < 1.0:
         raise ValueError("noise correlation must be in [0, 1)")
     independent = rng.normal(0.0, noise_stds[:, None], (len(noise_stds), sample_count))
@@ -407,6 +415,8 @@ def generate_noise(noise_stds: np.ndarray, sample_count: int, rng: np.random.Gen
 
 
 def perturb_responses(responses: np.ndarray, rng: np.random.Generator, cfg: Q4V1Config) -> np.ndarray:
+    """复响应随机扰动：对数正态增益抖动 σ=0.15 + 相位抖动 σ=0.20 rad。"""
+    # [AI-1] 辅助传感器级/元素级扰动模式切换
     if cfg.response_gain_jitter == 0.0 and cfg.response_phase_jitter == 0.0:
         return responses
     if cfg.response_jitter_mode == "sensor":
@@ -460,6 +470,7 @@ def fused_statistics(stats: np.ndarray, noise_stds: np.ndarray) -> np.ndarray:
 @lru_cache(maxsize=512)
 def calibrated_threshold(layout_key: tuple[int, ...], noise_key: tuple[float, ...], cfg: Q4V1Config) -> float:
     """MC 门限（LRU 缓存）：纯噪声下融合统计量 max 的 95% 分位数，控制虚警率。"""
+    # [AI-1] 辅助布局专用门限 LRU 缓存，避免跨布局复用错误门限
     t = default_time_axis(cfg)
     sin_basis, cos_basis = basis_matrices(t)
     noise_stds = np.asarray(noise_key, dtype=float)
