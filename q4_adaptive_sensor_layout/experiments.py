@@ -53,6 +53,8 @@ def _fault_rates(rows: list[dict]) -> list[float]:
 
 
 def _layout_rows(points, evaluations, benchmark_map: dict[str, str]) -> list[dict]:
+    """布局评分明细表：目标函数分解项 + 冗余度 + 信息量诊断。"""
+    # [AI-1] 辅助布局评分分量结构化输出
     rows = []
     for rank, evaluation in enumerate(evaluations, 1):
         name = layout_name(points, evaluation.layout)
@@ -75,6 +77,8 @@ def _layout_rows(points, evaluations, benchmark_map: dict[str, str]) -> list[dic
 
 
 def _candidate_rows(points) -> list[dict]:
+    """候选点明细表：位置/法向量/噪声底/各频点响应幅相。"""
+    # [AI-1] 辅助候选点结构化输出与响应幅相分解
     rows = []
     for index, point in enumerate(points):
         row = {
@@ -153,6 +157,8 @@ def _run_detection_trials(points, layout, layout_label: str, snr_levels: tuple[f
 
 
 def summarize_detection(rows: list[dict]) -> list[dict]:
+    """检测试验汇总：按布局/SNR 分组统计 Pd、P_FA 和分量检出率。"""
+    # [AI-1] 辅助分组统计与信号/噪声双类型分离
     grouped: dict[tuple[str, str, float], list[dict]] = defaultdict(list)
     for row in rows:
         grouped[(row["layout"], row["benchmark"], row["snr_db"])].append(row)

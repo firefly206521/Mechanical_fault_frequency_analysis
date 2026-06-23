@@ -24,6 +24,7 @@ from q1_model_compare import (
 )
 
 
+# [AI-1] 辅助 GLRT 参数字典集中管理，供输出报告引用
 GLRT_PARAMETERS = {
     "signal_model": "x(t)=A sin(2*pi*f*t+phi)+n(t)",
     "preprocess": "linear detrend",
@@ -37,14 +38,20 @@ GLRT_PARAMETERS = {
 
 @lru_cache(maxsize=4)
 def _load_q1_data_cached(data_path: str) -> tuple[np.ndarray, np.ndarray, float]:
+    """LRU 缓存数据加载：避免重复读取 Excel 文件。"""
+    # [AI-1] 辅助 LRU 缓存装饰器配置（maxsize=4）
     return load_single_source(Path(data_path))
 
 
 def load_q1_data(cfg: Config) -> tuple[np.ndarray, np.ndarray, float]:
+    """数据加载缓存代理：路径规范化后转发 LRU 缓存。"""
+    # [AI-1] 辅助路径规范化与缓存转发
     return _load_q1_data_cached(str(Path(cfg.data_path).resolve()))
 
 
 def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
+    """频率掩码校验：确保搜索区间内至少有一个 FFT bin。"""
+    # [AI-1] 辅助空掩码保护与错误提示信息
     mask = frequency_bounds(freqs, cfg)
     if not np.any(mask):
         raise ValueError(
@@ -90,6 +97,7 @@ def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
 
 def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
     """GLRT 检测：去趋势→归一化周期图→粗检峰→MC 门限判决→精修频率。"""
+    # [AI-1] 辅助 GLRT 检测端到端封装与结果字典标准化
     y = preprocess(x)
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
@@ -114,6 +122,7 @@ def glrt_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> 
 
 def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict[str, float | bool]:
     """FFT 峰值法（与 GLRT 数学等价）：同一周期图、同一 MC 门限，二者检测结论一致。"""
+    # [AI-1] 辅助 FFT 等价实现封装，共享 GLRT 统计量与门限
     y = preprocess(x)
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
@@ -138,6 +147,7 @@ def fft_peak_detect_signal(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config)
 
 def recovered_signal(t: np.ndarray, x: np.ndarray, freq: float) -> np.ndarray:
     """最小二乘重建正弦：在指定频率下拟合 sin/cos/offset，返回拟合波形。"""
+    # [AI-1] 辅助最小二乘重建与波形返回
     y = preprocess(x)
     omega_t = 2.0 * np.pi * freq * t
     design = np.column_stack([np.sin(omega_t), np.cos(omega_t), np.ones_like(t)])
@@ -147,6 +157,7 @@ def recovered_signal(t: np.ndarray, x: np.ndarray, freq: float) -> np.ndarray:
 
 def analyze_preprocessing_and_noise(cfg: Config, result: dict[str, float | bool | str]) -> pd.DataFrame:
     """噪声诊断：计算 SNR、残差统计矩（偏度/峰度/自相关），验证白噪声假设。"""
+    # [AI-1] 辅助残差统计矩与 SNR 估计诊断管线
     t, x, fs = load_q1_data(cfg)
     y = preprocess(x)
     s_hat = recovered_signal(t, x, float(result["refined_frequency_hz"]))
@@ -178,6 +189,8 @@ def analyze_preprocessing_and_noise(cfg: Config, result: dict[str, float | bool 
 
 
 def build_parameter_table(cfg: Config) -> pd.DataFrame:
+    """参数汇总表：将 GLRT 所有配置以 DataFrame 形式输出供论文引用。"""
+    # [AI-1] 辅助参数表标准化生成
     rows = [
         {"parameter": "f_min", "value": cfg.f_min, "unit": "Hz", "meaning": "频率搜索下限"},
         {"parameter": "f_max", "value": cfg.f_max, "unit": "Hz", "meaning": "频率搜索上限"},
@@ -192,6 +205,8 @@ def build_parameter_table(cfg: Config) -> pd.DataFrame:
 
 
 def run_segment_validation(cfg: Config, segment_seconds: float = 50.0) -> pd.DataFrame:
+    """分段稳定性验证：将数据切为 50s 段，各段独立 GLRT 检测，检查频率恒定性。"""
+    # [AI-1] 辅助分段 GLRT 编排与频率偏差统计
     t, x, fs = load_q1_data(cfg)
     segment_len = int(round(segment_seconds * fs))
     rows = []

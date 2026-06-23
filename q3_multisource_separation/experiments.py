@@ -61,6 +61,7 @@ def fast_spaced_detection(
     bic_delta: float = 10.0,
 ) -> dict:
     """Compatibility wrapper around the same detector used for real data."""
+    # [AI-1] 辅助 SIC+BIC 检测器兼容包装
     fit, _ = detect_multitone(t, x, fs, cfg, max_components=max_components, bic_delta=bic_delta)
     return fit
 
@@ -73,6 +74,8 @@ def run_simulation_trial(
     replicate: int,
     cfg: GLRTConfig,
 ) -> dict:
+    """Monte Carlo SNR 单次试验：合成多频信号→SIC+BIC 检测→误差统计。"""
+    # [AI-1] 辅助多频合成与 SIC+BIC 检测误差统计
     truth_f = np.asarray(truth_fit["frequencies_hz"], float)
     truth_a = np.asarray([row["amplitude"] for row in truth_fit["components"]], float)
     total_power = float(np.sum(truth_a ** 2 / 2.0))
@@ -199,6 +202,8 @@ def run_resolution_trial(
 
 
 def run_null_trial(t: np.ndarray, fs: float, noise_std: float, replicate: int, cfg: GLRTConfig) -> dict:
+    """纯噪声虚警试验：检验 GLRT 在纯噪声下的误报率是否匹配预设 P_FA。"""
+    # [AI-1] 辅助纯噪声虚警率校准试验
     rng = trial_rng(3000, replicate)
     noise = rng.normal(0.0, noise_std, len(t))
     started = time.perf_counter()
@@ -233,6 +238,8 @@ def _signal_from_components(t: np.ndarray, frequencies: np.ndarray, amplitudes: 
 
 
 def run_extreme_trial(t: np.ndarray, fs: float, truth_fit: dict, noise_std: float, case_name: str, replicate: int, cfg: GLRTConfig) -> dict:
+    """极端工况单次试验：10 种预设场景（低 SNR/近频/谐波/脉冲噪声等）。"""
+    # [AI-1] 辅助 10 种极端工况参数生成与检测器分发
     rng = trial_rng(4000 + EXTREME_CASES.index(case_name), replicate)
     truth_f = np.asarray(truth_fit["frequencies_hz"], float)
     truth_a = np.asarray([row["amplitude"] for row in truth_fit["components"]], float)
@@ -364,6 +371,8 @@ def wilson_interval(successes: int, runs: int, z: float = 1.96) -> tuple[float, 
 
 
 def summarize_simulation(rows: list[dict]) -> list[dict]:
+    """SNR 试验汇总：按 SNR 分组统计正确定阶率、频率/振幅/相位误差。"""
+    # [AI-1] 辅助 Wilson CI 估计与分组统计聚合
     output = []
     for snr in SNR_LEVELS:
         group = [row for row in rows if np.isclose(float(row["snr_total_db"]), snr, rtol=0.0, atol=1e-12)]
@@ -390,6 +399,8 @@ def summarize_simulation(rows: list[dict]) -> list[dict]:
 
 
 def summarize_resolution(rows: list[dict]) -> list[dict]:
+    """近频分辨率汇总：按振幅场景/频率间隔分组，统计 SIC vs MUSIC 成功率。"""
+    # [AI-1] 辅助 SIC vs MUSIC 对比统计与 Rayleigh 倍数标注
     output = []
     for case in AMPLITUDE_CASES:
         for separation in SEPARATIONS:
