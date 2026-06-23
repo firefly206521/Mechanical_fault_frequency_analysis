@@ -66,6 +66,8 @@ def q1_compatible_glrt_threshold(n: int, fs: float, cfg: GLRTConfig) -> float:
 
 
 def load_multi_source(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
+    """加载"多故障源"工作表：自动回退至第二工作表，校验时间严格递增。"""
+    # [AI-1] 辅助多源工作表回退逻辑与递增校验
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
         if "多故障源" in wb.sheetnames:
@@ -409,6 +411,8 @@ def detect_multitone(
 
 
 def component_table(fit: dict) -> list[dict]:
+    """分量 SNR 表：每分量的信号功率与残差噪声比。"""
+    # [AI-1] 辅助分量级 SNR 估计与条件数标注
     noise_power = float(np.mean(fit["residual"] ** 2))
     rows = []
     for component in fit["components"]:
@@ -427,6 +431,8 @@ def component_table(fit: dict) -> list[dict]:
 
 
 def segment_stability(t: np.ndarray, y: np.ndarray, frequencies: np.ndarray, seconds: float = 50.0) -> list[dict]:
+    """分段稳定性分析：各段独立/公共频率拟合，评估频率一致性。"""
+    # [AI-1] 辅助分段公共频率与独立频率偏差统计
     fs = 1.0 / np.median(np.diff(t))
     size = int(round(seconds * fs))
     rows = []
@@ -452,6 +458,8 @@ def segment_stability(t: np.ndarray, y: np.ndarray, frequencies: np.ndarray, sec
 
 
 def baseband_series(t: np.ndarray, x: np.ndarray, center_hz: float = 13.5, target_fs: float = 1.0) -> tuple[np.ndarray, np.ndarray, float]:
+    """基带降采样：Hilbert→复混频→低通→抽取，将窄带信号搬至零频。"""
+    # [AI-1] 辅助复混频基带变换与 FFT 低通抽取
     analytic = analytic_signal(x)
     mixed = analytic * np.exp(-1j * 2.0 * np.pi * center_hz * t)
     fs = 1.0 / np.median(np.diff(t))
@@ -467,6 +475,8 @@ def baseband_series(t: np.ndarray, x: np.ndarray, center_hz: float = 13.5, targe
 
 
 def _complex_fit(t: np.ndarray, z: np.ndarray, offsets: Iterable[float]) -> dict:
+    """复指数联合拟合：多频偏移→复设计矩阵→最小二乘→BIC 评估。"""
+    # [AI-1] 辅助复设计矩阵 SVD 诊断与 BIC 计算
     offsets = np.sort(np.asarray(list(offsets), dtype=float))
     columns = [np.exp(1j * 2.0 * np.pi * offset * t) for offset in offsets]
     columns.append(np.ones_like(t, dtype=complex))
@@ -482,6 +492,8 @@ def _complex_fit(t: np.ndarray, z: np.ndarray, offsets: Iterable[float]) -> dict
 
 
 def _complex_sse(t: np.ndarray, z: np.ndarray, offsets: Iterable[float]) -> float:
+    """复指数拟合 SSE：构建设计矩阵→最小二乘→残差平方和。"""
+    # [AI-1] 辅助复指数设计矩阵与 SSE 快速计算
     offsets = np.asarray(list(offsets), dtype=float)
     design = np.column_stack([*[np.exp(1j * 2.0 * np.pi * offset * t) for offset in offsets], np.ones_like(t, dtype=complex)])
     beta, _, rank, _ = np.linalg.lstsq(design, z, rcond=1e-12)
@@ -493,6 +505,7 @@ def _complex_sse(t: np.ndarray, z: np.ndarray, offsets: Iterable[float]) -> floa
 
 def _baseband_periodogram(z: np.ndarray, fs: float, step_hz: float, limit_hz: float = 0.012) -> tuple[np.ndarray, np.ndarray]:
     """Fine local periodogram computed by zero-padded complex FFT."""
+    # [AI-1] 辅助零填充复 FFT 高分辨率局部周期图
     nfft = max(len(z), int(math.ceil(fs / step_hz)))
     centered = z - np.mean(z)
     frequencies = np.fft.fftfreq(nfft, 1.0 / fs)
@@ -526,6 +539,7 @@ def _refine_complex_pair(t: np.ndarray, z: np.ndarray, seed: np.ndarray, rounds:
 
 def _refine_single_full(t: np.ndarray, x: np.ndarray, seed_hz: float, width_hz: float = 0.00025) -> dict:
     """Refine the one-tone null on the full real-valued record."""
+    # [AI-1] 辅助全记录单频零假设黄金分割精修
     frequency = golden_minimize(
         lambda value: _multi_sse(t, x, [value]),
         max(0.001, seed_hz - width_hz),
@@ -543,6 +557,7 @@ def _pattern_refine_pair_full(
     max_iterations: int = 8,
 ) -> dict:
     """Two-dimensional variable-projection search in center/separation space."""
+    # [AI-1] 辅助二维中心/分离度交替下降搜索与 SSE 缓存
     seed = np.sort(np.asarray(seed_hz, float))
     center = float(np.mean(seed))
     separation = float(seed[1] - seed[0])
@@ -583,6 +598,7 @@ def _pattern_refine_pair_full(
 
 def _frequency_uncertainty(t: np.ndarray, x: np.ndarray, fit: dict) -> dict:
     """Finite-difference Hessian uncertainty for a fitted frequency pair."""
+    # [AI-1] 辅助有限差分 Hessian 与频率标准误 95% CI 估计
     frequencies = np.asarray(fit["frequencies_hz"], float)
     if len(frequencies) != 2:
         return {"frequency_ci_reliable": False}
@@ -628,6 +644,7 @@ def conditional_glrt_threshold(
     random_seed: int = SEED + 31,
 ) -> float:
     """Monte Carlo threshold for a searched second tone under a one-tone null."""
+    # [AI-1] 辅助条件 GLRT MC 门限：单频零假设下的 F 统计量 99% 分位
     rng = np.random.default_rng(random_seed)
     time_axis = np.arange(n, dtype=float) / fs
     statistics = np.empty(monte_carlo_runs, float)
@@ -656,6 +673,7 @@ def close_pair_resolver(
     The center only defines the heterodyne passband. Candidate frequencies are
     estimated independently and are not constrained to be symmetric around it.
     """
+    # [AI-1] 辅助 SIC 剥离+重扫描+联合拟合流程，含多候选策略评估
     tb, z, fsb = baseband_series(t, x, center_hz)
     grid, original_power = _baseband_periodogram(z, fsb, local_grid_step_hz)
     coarse_one = float(grid[int(np.argmax(original_power))])
@@ -773,6 +791,8 @@ def music_close_pair(
     grid_step_hz: float = 0.000025,
     order: int = 80,
 ) -> dict:
+    """MUSIC 近频对照：基带降采样→协方差→MDL 定阶→伪谱峰值提取。"""
+    # [AI-1] 辅助 MUSIC MDL 定阶与伪谱峰值搜索
     tb, z, fsb = baseband_series(t, x, center_hz)
     order = min(order, len(z) // 2)
     trajectory = np.lib.stride_tricks.sliding_window_view(z, order).T

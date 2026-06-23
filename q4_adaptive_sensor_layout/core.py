@@ -89,6 +89,8 @@ class LayoutEvaluation:
 
 
 def default_time_axis(cfg: Q4V1Config) -> np.ndarray:
+    """默认时间轴：duration_s × fs 个采样点。"""
+    # [AI-1] 辅助时间轴生成与采样数取整
     n = int(round(cfg.duration_s * cfg.fs))
     return np.arange(n, dtype=float) / cfg.fs
 
@@ -149,6 +151,7 @@ def _response_at(position: np.ndarray, normal: np.ndarray, region_index: int) ->
 
 def generate_candidate_points(grid_size: int, seed: int = SEED) -> list[CandidatePoint]:
     """生成无量纲候选测点：6 区域 × N 环，含位置、法向量、噪声底和复传播响应。"""
+    # [AI-1] 辅助黄金比例螺旋 jitter 与区域噪声基底分配
     rng = np.random.default_rng(seed)
     centers = _region_centers()
     points: list[CandidatePoint] = []
@@ -182,23 +185,33 @@ def generate_candidate_points(grid_size: int, seed: int = SEED) -> list[Candidat
 
 
 def response_matrix(points: list[CandidatePoint]) -> np.ndarray:
+    """复响应矩阵：N_points × N_faults，每个元素为复增益。"""
+    # [AI-1] 辅助复响应矩阵向量化提取
     return np.asarray([point.response for point in points], dtype=complex)
 
 
 def noise_vector(points: list[CandidatePoint]) -> np.ndarray:
+    """噪声标准差向量：从 CandidatePoint 列表提取。"""
+    # [AI-1] 辅助噪声向量提取与 dtype 统一
     return np.asarray([point.noise_std for point in points], dtype=float)
 
 
 def fusion_weight_vector(noise_stds: np.ndarray) -> np.ndarray:
+    """逆方差加权向量：归一化 1/σ²，和为 1。"""
+    # [AI-1] 辅助逆方差加权归一化
     inv_var = 1.0 / np.maximum(np.asarray(noise_stds, dtype=float) ** 2, np.finfo(float).eps)
     return inv_var / np.sum(inv_var)
 
 
 def whitened_response(points: list[CandidatePoint]) -> np.ndarray:
+    """白化响应矩阵：逐点复响应除以噪声标准差，实现预白化。"""
+    # [AI-1] 辅助复响应除噪声标准差的预白化
     return response_matrix(points) / noise_vector(points)[:, None]
 
 
 def point_scores(points: list[CandidatePoint]) -> list[dict]:
+    """单点评分：白化响应最小/均值特征值加权，用于预筛选排序。"""
+    # [AI-1] 辅助白化响应特征值加权评分公式
     white = whitened_response(points)
     rows: list[dict] = []
     for index, point in enumerate(points):
@@ -304,6 +317,7 @@ def evaluate_layout(points: list[CandidatePoint], layout: Iterable[int], cfg: Q4
 
 def greedy_layout(points: list[CandidatePoint], candidate_indexes: list[int], size: int = 3, cfg: Q4V1Config | None = None) -> LayoutEvaluation:
     """贪心搜索：逐点添加能最大提升评分的候选点，构建初始布局供后续交换优化。"""
+    # [AI-1] 辅助贪心逐点添加与目标函数增量评估
     if len(candidate_indexes) < size:
         raise ValueError(f"greedy layout needs at least {size} candidate points")
     selected: list[int] = []
@@ -350,6 +364,8 @@ def one_swap_search(points: list[CandidatePoint], candidate_indexes: list[int], 
 
 
 def exhaustive_layouts(points: list[CandidatePoint], candidate_indexes: list[int], top_n: int = 10, cfg: Q4V1Config | None = None) -> list[LayoutEvaluation]:
+    """三点穷举搜索：枚举所有 C(N,3) 组合→评分→取 top_n。"""
+    # [AI-1] 辅助 itertools.combinations 穷举与评分排序
     if len(candidate_indexes) < 3:
         raise ValueError("exhaustive layout search needs at least three candidate points")
     evaluations = [evaluate_layout(points, combo, cfg) for combo in itertools.combinations(candidate_indexes, 3)]
@@ -366,6 +382,8 @@ def layout_regions(points: list[CandidatePoint], layout: Iterable[int]) -> str:
 
 
 def baseline_layouts(points: list[CandidatePoint], candidate_indexes: list[int], seed: int = SEED) -> dict[str, tuple[int, ...]]:
+    """基线布局集：max_response/random/spaced/V0 区域匹配四种对照策略。"""
+    # [AI-1] 辅助四种基线策略生成与区域匹配
     if len(candidate_indexes) < 3:
         raise ValueError("baseline layouts need at least three candidate points")
     scores = point_scores(points)
@@ -398,6 +416,8 @@ def baseline_layouts(points: list[CandidatePoint], candidate_indexes: list[int],
 
 
 def noise_stds_for_snr(points: list[CandidatePoint], snr_db: float) -> np.ndarray:
+    """SNR→噪声标准差：总信号功率除 SNR 再开方，乘以各点噪声基底比。"""
+    # [AI-1] 辅助 SNR 逆推噪声标准差公式
     base_sigma = math.sqrt(signal_power() / (10.0 ** (snr_db / 10.0)))
     return base_sigma * noise_vector(points)
 
@@ -439,6 +459,7 @@ def synthesize_layout_samples(
     cfg: Q4V1Config,
 ) -> tuple[np.ndarray, np.ndarray]:
     """合成多传感器数据：施加增益/相位随机扰动 + 相关噪声，模拟真实传播不确定性。"""
+    # [AI-1] 辅助扰动响应与多频信号合成的向量化实现
     noise_stds_all = noise_stds_for_snr(points, snr_db)
     noise_stds = noise_stds_all[list(layout)]
     responses = perturb_responses(response_matrix(points)[list(layout), :], rng, cfg)
@@ -455,6 +476,8 @@ def synthesize_layout_samples(
 
 
 def projection_statistics(samples: np.ndarray, sin_basis: np.ndarray, cos_basis: np.ndarray, noise_stds: np.ndarray) -> np.ndarray:
+    """投影统计量：去均值→sin/cos 正交投影→χ²₂ 归一化 T²。"""
+    # [AI-1] 辅助去均值正交投影与 χ² 归一化
     n = samples.shape[1]
     centered = samples - np.mean(samples, axis=1, keepdims=True)
     a = (2.0 / n) * centered @ sin_basis.T
@@ -463,6 +486,8 @@ def projection_statistics(samples: np.ndarray, sin_basis: np.ndarray, cos_basis:
 
 
 def fused_statistics(stats: np.ndarray, noise_stds: np.ndarray) -> np.ndarray:
+    """融合统计量：逆方差加权求和，多传感器统计量合并为标量判决量。"""
+    # [AI-1] 辅助逆方差加权融合公式
     weights = fusion_weight_vector(noise_stds)
     return np.sum(stats * weights[:, None], axis=0)
 

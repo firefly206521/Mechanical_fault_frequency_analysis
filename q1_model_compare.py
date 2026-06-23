@@ -44,6 +44,7 @@ class Config:
 
 def load_single_source(data_path: Path) -> tuple[np.ndarray, np.ndarray, float]:
     """读入"单源故障"工作表，校验列名，返回 (t, x, fs)。"""
+    # [AI-1] 辅助 pandas 读取与列名校验、采样率估计保护
     df = pd.read_excel(data_path, sheet_name=SHEET_SINGLE)
     if list(df.columns[:2]) != ["t", "x(t)"]:
         raise ValueError(f"Unexpected columns in {data_path}: {list(df.columns)}")
@@ -74,6 +75,8 @@ def preprocess(x: np.ndarray) -> np.ndarray:
 
 
 def frequency_bounds(freqs: np.ndarray, cfg: Config) -> np.ndarray:
+    """频率区间掩码：根据 cfg.f_min/f_max 生成布尔索引。"""
+    # [AI-1] 辅助频率掩码与搜索区间归一化
     return (freqs >= cfg.f_min) & (freqs <= cfg.f_max)
 
 
@@ -136,6 +139,8 @@ def refine_frequency(
 
 
 def timed_model(name: str, func, t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """计时包装器：调用模型→计时→精修→统一输出字典，用于多模型公平比较。"""
+    # [AI-1] 辅助计时包装与精修频率统一接口
     start = time.perf_counter()
     out = func(t, x, fs, cfg)
     runtime_ms = (time.perf_counter() - start) * 1000.0
@@ -151,6 +156,8 @@ def timed_model(name: str, func, t: np.ndarray, x: np.ndarray, fs: float, cfg: C
 
 
 def fft_spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+    """Hann 窗 FFT 功率谱：去趋势→加窗→rfft→|·|²。"""
+    # [AI-1] 辅助 Hann 窗 FFT 功率谱标准化计算
     y = preprocess(x)
     window = np.hanning(len(y))
     spec = np.fft.rfft(y * window)
@@ -160,6 +167,8 @@ def fft_spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def model_fft_peak(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """FFT 峰值基线：Hann 窗周期图最大值搜索，无统计门限。"""
+    # [AI-1] 辅助 FFT 频率掩码 argmax 粗检测
     freqs, power = fft_spectrum(x, fs)
     mask = require_frequency_mask(freqs, cfg)
     idx = np.where(mask)[0][np.argmax(power[mask])]
@@ -173,6 +182,8 @@ def model_fft_peak(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict
 
 
 def model_welch_psd(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """Welch 平均周期图：分段 Hann 窗→平均 PSD→峰值检测（方差降低）。"""
+    # [AI-1] 辅助 Welch 参数调优（nperseg=8192, noverlap=4096）
     y = preprocess(x)
     freqs, psd = signal.welch(
         y,
@@ -194,6 +205,8 @@ def model_welch_psd(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dic
 
 
 def local_median_floor(values: np.ndarray, train: int, guard: int) -> np.ndarray:
+    """CA-CFAR 局部中值底板：guard 区间 + train 区间滑窗取中值。"""
+    # [AI-1] 辅助 CFAR 滑窗中值底板实现与 nan 回填保护
     floor = np.full(values.shape, np.nan, dtype=float)
     n = len(values)
     for i in range(n):
@@ -210,6 +223,8 @@ def local_median_floor(values: np.ndarray, train: int, guard: int) -> np.ndarray
 
 
 def model_cfar_fft(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """CA-CFAR 自适应检测：FFT→局部中值底板→比率门限判决。"""
+    # [AI-1] 辅助 CA-CFAR 比率计算与 scale 参数门限封装
     freqs, power = fft_spectrum(x, fs)
     mask = require_frequency_mask(freqs, cfg)
     idx_all = np.where(mask)[0]
@@ -286,6 +301,8 @@ def model_glrt(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
 
 
 def diagonal_average(matrix: np.ndarray) -> np.ndarray:
+    """Hankel 矩阵对角平均：将 SSA 重构矩阵还原为一维序列。"""
+    # [AI-1] 辅助对角平均 Hankel 逆变换实现
     rows, cols = matrix.shape
     out = np.zeros(rows + cols - 1, dtype=float)
     counts = np.zeros_like(out)
@@ -296,6 +313,8 @@ def diagonal_average(matrix: np.ndarray) -> np.ndarray:
 
 
 def ssa_denoise(x: np.ndarray, window: int = 400, rank: int = 2) -> np.ndarray:
+    """SSA 降噪：滑动窗口 trajectory→随机化 SVD→rank 重构→对角平均。"""
+    # [AI-1] 辅助随机化 SVD 降秩与 trajectory 矩阵对角平均
     y = preprocess(x)
     if window >= len(y) // 2:
         window = max(20, len(y) // 10)
@@ -311,6 +330,8 @@ def ssa_denoise(x: np.ndarray, window: int = 400, rank: int = 2) -> np.ndarray:
 
 
 def model_ssa_fft(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """SSA 去噪 + FFT 模型：rank-2 重构→FFT 峰值检测。"""
+    # [AI-1] 辅助 SSA rank-2 降噪后 FFT 峰值提取
     denoised = ssa_denoise(x)
     freqs, power = fft_spectrum(denoised, fs)
     mask = require_frequency_mask(freqs, cfg)
@@ -332,6 +353,8 @@ def music_pseudospectrum(
     signal_dim: int = 2,
     grid_size: int = 12000,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """MUSIC 伪谱：滑动窗口→协方差→特征分解→噪声子空间正交投影。"""
+    # [AI-1] 辅助滑动窗口协方差估计与噪声子空间投影
     y = preprocess(x)
     windows = np.lib.stride_tricks.sliding_window_view(y, embed_dim)
     step = max(1, len(windows) // 6000)
@@ -351,6 +374,8 @@ def music_pseudospectrum(
 
 
 def model_music(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> dict:
+    """MUSIC 模型入口：伪谱峰值搜索与中值参考比判决。"""
+    # [AI-1] 辅助 MUSIC 峰值搜索与中值参考比封装
     freqs, pseudo = music_pseudospectrum(x, fs, cfg)
     idx = int(np.argmax(pseudo))
     ratio = float(pseudo[idx] / np.median(pseudo))
@@ -374,6 +399,8 @@ MODEL_FUNCS = [
 
 
 def run_real_data_models(t: np.ndarray, x: np.ndarray, fs: float, cfg: Config) -> pd.DataFrame:
+    """六模型统一编排：依次运行→计时→精修→标准化 DataFrame 输出。"""
+    # [AI-1] 辅助六模型循环编排与 DataFrame 列标准化
     rows = []
     for name, func in MODEL_FUNCS:
         print(f"Running {name}...")
@@ -404,6 +431,8 @@ def synthetic_signal(
     snr_db: float,
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """合成正弦信号：根据 SNR 反推噪声功率，生成 t 和含噪观测 x。"""
+    # [AI-1] 辅助 SNR→噪声功率逆推公式与随机相位初始化
     t = np.arange(n, dtype=float) / fs
     phase = rng.uniform(0.0, 2.0 * np.pi)
     s = amplitude * np.sin(2.0 * np.pi * f0 * t + phase)
@@ -414,6 +443,8 @@ def synthetic_signal(
 
 
 def run_synthetic_evaluation(fs: float, n: int, cfg: Config) -> pd.DataFrame:
+    """合成数据 Monte Carlo：多 SNR 级扫描，评估检测概率和频率误差。"""
+    # [AI-1] 辅助多 SNR 级 Monte Carlo 编排与误报/检出统计聚合
     rng = np.random.default_rng(cfg.random_seed + 1)
     snr_values = [-20.0, -15.0, -12.0, -10.0, -5.0]
     f0 = 2.0
@@ -480,6 +511,8 @@ def write_markdown_report(
     fs: float,
     n: int,
 ) -> None:
+    """Markdown 报告生成：多模型真实/合成数据对比，模型优先级排序。"""
+    # [AI-1] 辅助 Markdown 格式化报告与模型选择优先级排序
     lines = [
         "# Q1 多模型检测比较报告",
         "",
@@ -533,6 +566,8 @@ def write_markdown_report(
 
 
 def plot_real_spectrum(t: np.ndarray, x: np.ndarray, fs: float, real_df: pd.DataFrame, cfg: Config) -> None:
+    """真实数据频谱图：叠加各模型精修频率竖线标注。"""
+    # [AI-1] 辅助 matplotlib 对数频谱与多模型频率竖线标注
     freqs, power = fft_spectrum(x, fs)
     mask = frequency_bounds(freqs, cfg)
     plt.figure(figsize=(10, 5))
@@ -549,6 +584,8 @@ def plot_real_spectrum(t: np.ndarray, x: np.ndarray, fs: float, real_df: pd.Data
 
 
 def plot_model_scores(real_df: pd.DataFrame, cfg: Config) -> None:
+    """模型 RMSE 柱状图：按拟合误差排序展示六模型性能。"""
+    # [AI-1] 辅助 matplotlib 柱状图布局与旋转标签
     plt.figure(figsize=(10, 4.8))
     order = real_df.sort_values("fit_rmse")
     plt.bar(order["model_name"], order["fit_rmse"])
@@ -561,6 +598,8 @@ def plot_model_scores(real_df: pd.DataFrame, cfg: Config) -> None:
 
 
 def plot_simulation(sim_df: pd.DataFrame, cfg: Config) -> None:
+    """合成数据检测概率曲线：多模型 SNR-Pd 对比图。"""
+    # [AI-1] 辅助 matplotlib SNR-Pd 曲线与网格样式
     plt.figure(figsize=(10, 5))
     for name, group in sim_df.groupby("model_name"):
         group = group.sort_values("snr_db")
@@ -577,6 +616,8 @@ def plot_simulation(sim_df: pd.DataFrame, cfg: Config) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """CLI 参数解析：--data, --output-dir, --glrt-mc, --sim-mc, --skip-simulation。"""
+    # [AI-1] 辅助 argparse CLI 参数绑定与默认值
     parser = argparse.ArgumentParser(description="Compare Q1 weak-signal detection models.")
     parser.add_argument("--data", type=Path, default=Path("data.xlsx"))
     parser.add_argument("--output-dir", type=Path, default=Path("q1_results"))
@@ -587,6 +628,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Q1 多模型比较入口：加载→六模型检测→画图→写报告。"""
+    # [AI-1] 辅助端到端主流程编排与输出目录创建
     args = parse_args()
     cfg = Config(
         data_path=args.data,

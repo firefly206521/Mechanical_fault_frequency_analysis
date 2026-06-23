@@ -16,6 +16,8 @@ import openpyxl
 
 
 def load_single_source(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
+    """openpyxl 加载"单源故障"工作表，校验数值完整性，估计 fs。"""
+    # [AI-1] 辅助 openpyxl read_only 模式与数值校验
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb["单源故障"]
     rows = [(r[0], r[1]) for r in ws.iter_rows(min_row=2, values_only=True)]
@@ -38,6 +40,8 @@ def load_single_source(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
 
 
 def linear_detrend(t: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """时间中心化线性去趋势：最小二乘拟合线性分量后移除。"""
+    # [AI-1] 辅助时间中心化去趋势实现，返回去趋势信号与系数
     tc = t - np.mean(t)
     design = np.column_stack([tc, np.ones_like(tc)])
     coef = np.linalg.lstsq(design, x, rcond=None)[0]
@@ -45,11 +49,14 @@ def linear_detrend(t: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, np.ndarray
 
 
 def wrap_phase(value: np.ndarray | float) -> np.ndarray | float:
+    """相位缠绕至 (-π, π]：通过复指数映射实现。"""
+    # [AI-1] 辅助复指数相位缠绕公式
     return np.angle(np.exp(1j * value))
 
 
 def align_phase_to_reference(value: np.ndarray | float, reference: float) -> np.ndarray | float:
     """Move wrapped phase values onto the continuous branch around reference."""
+    # [AI-1] 辅助相位解缠至参考分支，避免 bootstrap 相位跳跃
     return reference + wrap_phase(np.asarray(value) - reference)
 
 
@@ -101,6 +108,8 @@ def harmonic_fit(t: np.ndarray, y: np.ndarray, frequency: float) -> dict:
 
 
 def golden_minimize(func, lo: float, hi: float, iterations: int = 55) -> float:
+    """黄金分割搜索：55 轮迭代无导一维最小化，收敛精度 ~1.6e-17·|hi-lo|。"""
+    # [AI-1] 辅助黄金分割迭代实现与收敛保护
     ratio = (math.sqrt(5.0) - 1.0) / 2.0
     c = hi - ratio * (hi - lo)
     d = lo + ratio * (hi - lo)
@@ -129,6 +138,8 @@ def refine_frequency(t: np.ndarray, y: np.ndarray, initial: float, half_width: f
 
 
 def moment_metrics(x: np.ndarray) -> dict[str, float]:
+    """统计矩诊断：偏度/峰度/波峰因子/Jarque-Bera 检验。"""
+    # [AI-1] 辅助偏度峰度 JB 统计量计算
     centered = x - np.mean(x)
     std = float(np.std(centered))
     z = centered / max(std, np.finfo(float).eps)
@@ -151,6 +162,8 @@ def moment_metrics(x: np.ndarray) -> dict[str, float]:
 
 
 def autocorrelation(x: np.ndarray, max_lag: int = 200) -> np.ndarray:
+    """自相关函数：去均值后点积归一化，max_lag=200。"""
+    # [AI-1] 辅助自相关向量化计算
     y = x - np.mean(x)
     denom = float(np.dot(y, y))
     return np.asarray([
@@ -160,6 +173,8 @@ def autocorrelation(x: np.ndarray, max_lag: int = 200) -> np.ndarray:
 
 
 def spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+    """去均值 Hann 窗 FFT 功率谱。"""
+    # [AI-1] 辅助 Hann 窗 FFT 功率谱标准化
     y = x - np.mean(x)
     spec = np.fft.rfft(y * np.hanning(len(y)))
     freq = np.fft.rfftfreq(len(y), 1.0 / fs)
@@ -167,6 +182,8 @@ def spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def band_power_rows(x: np.ndarray, fs: float) -> list[dict]:
+    """频带功率占比：将 0.05–49.5 Hz 分为 5 段计算各段能量分数。"""
+    # [AI-1] 辅助频带划分与功率占比计算
     freq, power = spectrum(x, fs)
     total = float(np.sum(power[(freq >= 0.05) & (freq <= 49.5)]))
     rows = []
@@ -333,6 +350,7 @@ def segment_length_sensitivity(
     segment_lengths: tuple[float, ...] = (25.0, 50.0, 100.0),
 ) -> tuple[list[dict], list[dict]]:
     """Compare common-frequency conclusions across several window lengths."""
+    # [AI-1] 辅助多窗长公共频率敏感性扫描
     detail_rows: list[dict] = []
     summary_rows: list[dict] = []
     for seconds in segment_lengths:
@@ -366,6 +384,8 @@ def segment_length_sensitivity(
 
 
 def fft_zero_phase_bandpass(x: np.ndarray, fs: float, center: float = 2.0) -> np.ndarray:
+    """FFT 零相位带通：通带内平顶、过渡带余弦锥形。"""
+    # [AI-1] 辅助 FFT 零相位带通滤波器设计与锥形权重
     n = len(x)
     freq = np.fft.rfftfreq(n, 1.0 / fs)
     inner_lo, inner_hi = center - 0.25, center + 0.25
@@ -380,6 +400,8 @@ def fft_zero_phase_bandpass(x: np.ndarray, fs: float, center: float = 2.0) -> np
 
 
 def analytic_signal(x: np.ndarray) -> np.ndarray:
+    """Hilbert 变换解析信号：FFT→正频率加倍→IFFT。"""
+    # [AI-1] 辅助 FFT 解析信号实现（奇偶长度兼容）
     n = len(x)
     X = np.fft.fft(x)
     h = np.zeros(n)
@@ -393,6 +415,8 @@ def analytic_signal(x: np.ndarray) -> np.ndarray:
 
 
 def targeted_filter_comparison(t: np.ndarray, y: np.ndarray, fit: dict, fs: float) -> tuple[list[dict], np.ndarray, np.ndarray]:
+    """目标频带滤波对比：零相位带通+解析包络 vs 谐波回归参考。"""
+    # [AI-1] 辅助带通滤波与谐波回归波形相关性对比
     filtered = fft_zero_phase_bandpass(y, fs, fit["frequency_hz"])
     analytic = analytic_signal(filtered)
     envelope = np.abs(analytic)
@@ -417,6 +441,7 @@ def targeted_filter_comparison(t: np.ndarray, y: np.ndarray, fit: dict, fs: floa
 
 def fft_zero_phase_lowpass(x: np.ndarray, fs: float, pass_hz: float = 8.0, stop_hz: float = 10.0) -> np.ndarray:
     """FFT low-pass used only as anti-aliasing before SSA downsampling."""
+    # [AI-1] 辅助 FFT 零相位低通与余弦锥形过渡带
     n = len(x)
     freq = np.fft.rfftfreq(n, 1.0 / fs)
     weight = np.ones_like(freq)
@@ -428,6 +453,7 @@ def fft_zero_phase_lowpass(x: np.ndarray, fs: float, pass_hz: float = 8.0, stop_
 
 def _ssa_reconstruct_pair(x: np.ndarray, fs: float, window: int, target_hz: float) -> tuple[np.ndarray, tuple[int, int], float]:
     """Reconstruct the two SSA components most concentrated around target_hz."""
+    # [AI-1] 辅助 SSA 协方差 EVD 与频带集中度选择
     centered = np.asarray(x, dtype=float) - float(np.mean(x))
     if window > len(centered):
         raise ValueError(f"SSA window ({window}) cannot exceed signal length ({len(centered)}).")
@@ -473,6 +499,7 @@ def ssa_recovery_comparison(
     anti-aliasing low-pass is applied before decimation; no 2 Hz band-pass is
     used, so SSA remains a data-driven decomposition comparison.
     """
+    # [AI-1] 辅助 SSA 降采样、窗口遍历与谐波回归相关性对比
     lowpassed = fft_zero_phase_lowpass(y, fs)
     t_ds = t[::downsample_factor]
     y_ds = lowpassed[::downsample_factor]
@@ -526,6 +553,8 @@ def ssa_recovery_comparison(
 
 
 def fast_frequency_estimate(t: np.ndarray, x: np.ndarray, fs: float, expected: float = 2.0) -> dict:
+    """快速频率估计：二次插值 FFT + 3 轮变量投影 Gauss-Newton 精修（无 scipy 依赖）。"""
+    # [AI-1] 辅助变量投影 Gauss-Newton 迭代与边界裁剪
     y, _ = linear_detrend(t, x)
     n = len(y)
     freq = np.fft.rfftfreq(n, 1.0 / fs)
