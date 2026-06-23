@@ -1,0 +1,83 @@
+\begin{thebibliography}{10}
+
+\bibitem{randall2001relationship}
+Robert~B Randall, J{\'e}r{\^o}me Antoni, and S~Chobsaard.
+\newblock The relationship between spectral correlation and envelope analysis in the diagnostics of bearing faults and other cyclostationary machine signals.
+\newblock {\em Mechanical Systems and Signal Processing}, 15(5):945--962, 2001.
+
+\bibitem{antoni2006spectral}
+J{\'e}r{\^o}me Antoni and Robert~B Randall.
+\newblock The spectral kurtosis: application to the vibratory surveillance and diagnostics of rotating machines.
+\newblock {\em Mechanical Systems and Signal Processing}, 20(2):308--331, 2006.
+
+\bibitem{mcdonald2012mckd}
+Geoff~L McDonald, Qing Zhao, and Ming~J Zuo.
+\newblock Maximum correlated {Kurtosis} deconvolution and application on gear tooth chip fault detection.
+\newblock {\em Mechanical Systems and Signal Processing}, 33:237--255, 2012.
+
+\bibitem{smith2019optimal}
+Wade~A Smith, Pietro Borghesani, Qing Ni, Kesheng Wang, and Zhongxiao Peng.
+\newblock Optimal demodulation-band selection for envelope-based diagnostics: A comparative study of traditional and novel tools.
+\newblock {\em Mechanical Systems and Signal Processing}, 134:106303, 2019.
+
+\bibitem{buzzoni2018blind}
+Marco Buzzoni, J{\'e}r{\^o}me Antoni, and Gianluca D'Elia.
+\newblock Blind deconvolution based on cyclostationarity maximization and its application to fault identification.
+\newblock {\em Journal of Sound and Vibration}, 432:569--601, 2018.
+
+\bibitem{kay1998fundamentals}
+Steven~M Kay.
+\newblock {\em Fundamentals of Statistical Signal Processing, Volume II: Detection Theory}.
+\newblock Prentice Hall PTR, 1998.
+
+\bibitem{golyandina2001ssa}
+Nina Golyandina, Vladimir Nekrutkin, and Anatoly~A Zhigljavsky.
+\newblock {\em Analysis of Time Series Structure: SSA and Related Techniques}.
+\newblock CRC Press, 2001.
+
+\bibitem{schmidt1986music}
+Ralph Schmidt.
+\newblock Multiple emitter location and signal parameter estimation.
+\newblock {\em IEEE Transactions on Antennas and Propagation}, 34(3):276--280, 1986.
+
+\bibitem{kammer1991sensor}
+Daniel~C Kammer.
+\newblock Sensor placement for on-orbit modal identification and correlation of large space structures.
+\newblock {\em Journal of Guidance, Control, and Dynamics}, 14(2):251--259, 1991.
+
+\bibitem{poor2013detection}
+H~Vincent Poor.
+\newblock {\em An Introduction to Signal Detection and Estimation}.
+\newblock Springer Science \& Business Media, 2013.
+
+\bibitem{scharf2005statistical}
+Louis~L Scharf and C{\'e}dric Demeure.
+\newblock {\em Statistical Signal Processing: Detection, Estimation, and Time Series Analysis}.
+\newblock Addison-Wesley, 2005.
+
+\bibitem{rohling1983cfar}
+Hermann Rohling.
+\newblock Radar {CFAR} thresholding in clutter and multiple target situations.
+\newblock {\em IEEE Transactions on Aerospace and Electronic Systems}, AES-19(4):608--621, 1983.
+
+\bibitem{brent2013algorithms}
+Richard~P Brent.
+\newblock {\em Algorithms for Minimization without Derivatives}.
+\newblock Courier Corporation, 2013.
+
+\bibitem{benzi1981mechanism}
+Roberto Benzi, Alfonso Sutera, and Angelo Vulpiani.
+\newblock The mechanism of stochastic resonance.
+\newblock {\em Journal of Physics A: Mathematical and General}, 14(11):L453, 1981.
+
+\bibitem{jia2015early}
+Feng Jia, Yaguo Lei, Hongkai Shan, and Jing Lin.
+\newblock Early fault diagnosis of bearings using an improved spectral kurtosis by maximum correlated kurtosis deconvolution.
+\newblock {\em Sensors}, 15(11):29363--29377, 2015.
+
+\bibitem{darong2018incipient}
+Huang Darong, Ke~Lanyan, Mi~Bo, Zhao Ling, and Sun Guoxi.
+\newblock A new incipient fault diagnosis method combining improved {RLS} and {LMD} algorithm for rolling bearings with strong background noise.
+\newblock {\em IEEE Access}, 6:26001--26010, 2018.
+
+\end{thebibliography}

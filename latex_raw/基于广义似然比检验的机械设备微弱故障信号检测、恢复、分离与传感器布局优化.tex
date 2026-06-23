@@ -1,0 +1,944 @@
+\documentclass[withoutpreface,bwprint]{cumcmthesis}
+
+\usepackage[framemethod=TikZ]{mdframed}
+\usepackage{url}
+\usepackage{subcaption}
+\usepackage{geometry}
+\usepackage{ulem}
+\usepackage{setspace}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{seqsplit}
+\usepackage{float}
+\usepackage{placeins}
+
+\lstdefinestyle{pythonappendix}{
+    language=Python,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{blue!55!black},
+    commentstyle=\color{green!35!black},
+    stringstyle=\color{red!45!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=7pt,
+    frame=single,
+    framesep=3pt,
+    rulecolor=\color{black!25},
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    keepspaces=true,
+    columns=fullflexible,
+    tabsize=4,
+    aboveskip=0.25em,
+    belowskip=0.4em,
+    lineskip=-1.1pt,
+    captionpos=b
+}
+\lstset{style=pythonappendix}
+
+\graphicspath{{./figures/}}
+
+\geometry{a4paper,left=25mm,right=25mm,top=25mm,bottom=25mm}
+\title{基于广义似然比检验的机械设备微弱故障信号检测、恢复、分离与传感器布局优化}
+
+
+\begin{document}
+\xeCJKsetup{AutoFakeBold={2.5}}
+% ===== 封面 =====
+\newpage
+\thispagestyle{empty}
+\vspace*{0.5cm}
+
+\begin{center}
+    {\zihao{-2}\heiti\bfseries 2026年NUDT-CSU数学建模联赛}
+\end{center}
+
+\begin{center}
+    \includegraphics[height=3cm]{图片1.png}\hspace{0.5cm}%
+    \includegraphics[height=3cm]{图片2.png}
+\end{center}
+
+\vspace{0.5cm}
+
+\makeatletter
+\begin{center}
+{\zihao{4}\heiti 题 目：}{\zihao{4}\heiti\@title}
+\end{center}
+\makeatother
+
+\vfill
+\thispagestyle{empty}
+\pagestyle{empty}
+
+\noindent{\zihao{-4}\heiti 摘 要：}
+
+机械设备故障产生的周期信号能量微弱，常被电机运转和传动系统产生的强噪声完全淹没。传统谱峭度法在强噪声下峭度被压缩、易导致误报；最大相关峭度解卷积则依赖已知故障周期——而本题中故障频率恰好是待求的未知量。本文以\textbf{广义似然比检验（GLRT）}为核心框架，构建了从单频检测、波形恢复、多分量分离到传感器布局优化的渐进式方法链。
+
+    \textbf{针对问题一：}对\texttt{data.xlsx}中"单源故障"工作表的数据进行线性去趋势后，采用归一化周期图扫描与纯噪声\textbf{Monte Carlo 门限校准}，在目标虚警率约$5\%$下检出故障频率$f_0 = 2.0000015$ Hz。相较于传统FFT峰值法，GLRT的核心优势在于提供了具有明确概率意义的统计判决门限，并通过连续频率精修突破FFT栅格分辨率限制。
+
+    \textbf{针对问题二：}以问题一频率为初值建立\textbf{谐波回归}模型，恢复出$\hat{s}(t) = 0.03519 \sin(2\pi \times 2.0000016t + 1.5736)$，并采用局部渐近正态近似量化了参数的不确定性。\textbf{奇异谱分析（SSA）}对照波形的相关系数达$0.9956$；合成数据实验覆盖SNR $-20$至$-5$ dB，参数区间覆盖率均超过$93.5\%$。
+
+    \textbf{针对问题三：}将单频GLRT扩展为基于\textbf{逐次干扰消除（SIC）}的顺序检测器，以联合谐波回归和\textbf{BIC准则}自动确定分量数量。在"多源故障"工作表中自动识别出4个周期分量，频率分别约为4、8、13、14 Hz。SNR $= -12$ dB时正确定阶率为$98.0\%$；条件化近频实验表明，$T = 400$ s条件下90\%经验辨识间隔约0.002--0.003 Hz，随振幅比增大而增宽。
+
+    \textbf{针对问题四：}采用V1参数化结构模型，在6个区域生成120个无量纲候选点，经预筛选和组合搜索后以Monte Carlo验证排序。最优布局为齿轮箱右区点\texttt{v1\_p105}与齿轮箱左区点\texttt{v1\_p074}、\texttt{v1\_p062}，三点通过互补频响覆盖全部4个目标频率。SNR $= -12$ dB时平均分量检出率为$84.25\%$，误报率为$3.67\%$。该结论适用于本文给定的参数化几何与传播响应设置，不能直接解释为真实设备上的物理最优安装坐标。
+
+    最后，本文方法链以GLRT为统一框架，具有虚警率可经验校准、分量数量可自动确定、辨识界限可条件化刻画的特点。四问从检测到部署共享核心统计框架，形成了完整的微弱故障信号处理方案。（[AI-1] 辅助生成摘要初稿与图表标注，人工修改定稿；[AI-3] 辅助文献检索与调研。）
+
+\par\vskip1ex
+\noindent{\zihao{-4}\heiti 关键词：}{\textbf{广义似然比检验}}，\textbf{微弱信号检测}，\textbf{谐波回归}，\textbf{多周期分量分离}，\textbf{传感器布局优化}
+
+% ===== 正文：页码从1开始 =====
+\newpage
+\setcounter{page}{1}
+\pagestyle{plain}
+
+\section{问题重述}
+\subsection{问题背景}
+机械设备长期运行后可能出现齿轮破损、轴承磨损等故障。故障引起的周期振动幅值较小，常被电机、传动系统和环境噪声掩盖，因此需要同时控制漏检和误报。
+
+从故障诊断领域的研究共识来看，强噪声下微弱故障检测的关键在于围绕故障的\textbf{周期结构}而非单纯的脉冲强度来设计检测链路\upcite{randall2001relationship}。传统工业诊断方法如谱峭度（Kurtogram）通过寻找最大冲击频带来定位故障\upcite{antoni2006spectral}，但强噪声会压缩谱峭度，非故障冲击也会产生高峭度，导致误选频带和误报。最大相关峭度解卷积（MCKD）利用故障周期先验增强微弱周期冲击\upcite{mcdonald2012mckd}，在低信噪比下效果优于传统最小熵解卷积，但依赖已知故障周期。针对性频带选择方法进一步表明，频带选择须围绕已知故障频率才能有效避免无关冲击的干扰\upcite{smith2019optimal}。这些研究共同指向：\textbf{能否显式利用故障信号的周期性先验，是提高检出率并压低误报率的关键}。
+
+\subsection{问题要求}
+假设某机械可能存在故障齿轮，其产生的微弱周期信号模型$s(t)$为：
+\begin{equation}
+s (t) = A \sin (2 \pi f _ {0} t + \phi_ {0}),
+\end{equation}
+其中$A$为信号振幅，$f_{0}$为故障特征频率，$\phi_{0}$为初相（三者均未知）。采集到的信号为$x(t) = s(t) + n(t)$。
+
+基于附件data.xlsx，建立数学模型解决以下问题：
+\begin{itemize}
+    \item [问题一] 建立一个能够有效检测并识别出淹没在强噪声中的微弱周期信号特征的数学模型。模型应能准确求解出目标频率$f_{0}$的具体数值，并说明该方法相较于传统傅里叶变换的优势。
+    \item [问题二] 在成功检测出$f_{0}$的基础上，进一步建立数学模型，实现对原始微弱周期信号$s(t)$的波形提取与恢复。给出恢复后的信号表达式，并从时域和频域两个角度展示恢复效果，定量评价恢复误差。
+    \item [问题三] 在实际工况中，机械设备可能同时存在多处不同位置的故障，导致采集到的信号中包含多个不同频率的微弱周期信号分量：$x(t) = \sum_{i=1}^{M} A_i \sin(2\pi f_i t + \phi_i) + n(t)$。请基于前两问建立的模型，提出一种扩展方案使其能够从单一通道的混合信号中自动分离并识别出多个潜在的周期分量频率$f_1, f_2, \cdots, f_M$，并估计对应的振幅$A_i$和初相$\phi_i$。设计数值实验验证方法，讨论当两个频率非常接近时的辨识极限。
+    \item [问题四] 假设可以在设备的关键部位布置最多3个加速度传感器。考虑到信号传播路径的衰减、不同测点对同一故障源的敏感度差异以及噪声的空间分布不均，请建立一个数学模型，为这3个传感器设计最优的布局方案。目标是最大化整个检测系统对微弱故障信号的综合检测概率，并最小化误报率。方案需结合前三问的结论，解释布局策略为何能提升系统的鲁棒性和可靠性，并设计实验进行仿真验证。
+\end{itemize}
+
+\section{问题分析}
+\subsection{问题一的分析}
+问题一要求在强噪声背景下检测微弱周期信号的频率$f_0$。核心难点在于：(1) 信号能量远低于噪声能量（估计SNR为$-12.08$ dB，功率比约16倍，幅度比约4倍）；(2) 故障频率$f_0$、振幅$A$和初相$\phi_0$均未知；(3) 传统方法各有局限。
+
+FFT功率谱法最为简单但缺乏显式的统计判决阈值——无法区分"微弱信号存在"与"纯噪声偶然波动"。工业界常用的谱峭度法（Kurtogram）\upcite{antoni2006spectral}在强噪声下峭度被压缩，且非故障冲击同样产生高峭度，误报风险高。MCKD\upcite{mcdonald2012mckd}和循环平稳盲解卷积\upcite{buzzoni2018blind}需要故障周期作为先验——这在本题中恰好是待求的未知量。
+
+广义似然比检验（GLRT）\upcite{kay1998fundamentals}为本题提供了理想框架。GLRT在FFT栅格频率上的计算可退化为归一化周期图的最大值检验；其独特贡献在于：(1) 有基于蒙特卡洛仿真的统计判决门限，可控制多频点联合扫描的虚警率；(2) 可自然扩展到未知参数的联合估计；(3) 增加了连续频率精修步骤。由于GLRT的信号模型（正弦+高斯噪声）与题设完全匹配，在$N$充分大时该检验是一致的\upcite{kay1998fundamentals}。
+
+\subsection{问题二的分析}
+问题二需要在已知$f_0$的基础上恢复$s(t)$的振幅$A$和初相$\phi_0$。核心难点在于：(1) 频率、振幅、初相耦合——Q1精修频率的统计不确定度（约$10^{-5}$ Hz）经$N=40001$放大后，若直接固定频率，振幅和相位估计会产生偏移；(2) 真实数据无波形真值，验证只能依靠残差诊断、谱峰抑制和多方法交叉对照间接完成；(3) 点估计不足以评价可靠性，Bootstrap对$N=40001$的非线性回归计算量过高。
+
+直接最小二乘拟合给出点估计但不提供不确定性，也未检验模型充分性。窄带滤波\upcite{smith2019optimal}可提取目标频带波形，但滤波器参数缺乏统计最优准则。SSA\upcite{golyandina2001ssa}能自适应分解信号，但分量选取依赖人工且对窗口长度敏感。
+
+本文以Q1精修频率为初值，对频率和线性参数联合非线性最小二乘，基于局部渐近正态近似以$10000$次多元正态抽样给出95\%参数区间。验证分三层：残差GLRT重扫描检验遗漏分量；BIC比较公共/独立频率模型检验频率恒定性；SSA与窄带滤波从不同原理恢复波形交叉验证。合成数据在$-20$至$-5$ dB共5个SNR水平上定量评估波形RMSE和区间覆盖率。
+
+\subsection{问题三的分析}
+问题三将场景从单周期分量扩展到多周期分量。核心挑战在于：(1) 分量数量$M$未知——过估计产生伪分量，欠估计遗漏真实故障；(2) 两频率接近时（$\Delta f$在$10^{-3}$ Hz量级），正弦/余弦基向量高度相关，设计矩阵病态，最小二乘解方差急剧放大；(3) 顺序检测的虚警率会累积，须在控制整体虚警率的前提下检测多个微弱分量；(4) 单通道数据只能识别显著周期分量，缺少转速、齿数等机械先验时，不能将分量唯一映射到独立物理故障源。
+
+MUSIC算法\upcite{schmidt1986music}频率分辨率高于周期图但需预知$M$，低SNR下伪谱峰展宽严重。ICA假设源信号非高斯，与正弦+高斯噪声模型不匹配。EMD缺乏频率选择性，近频正弦极易模态混叠。LASSO可在频率字典上一次选择所有分量，但正则化参数对结果敏感，近频时字典基强相关性破坏稀疏恢复条件。
+
+本文借鉴SIC思想：Q1的GLRT扩展为多峰顺序检测器，每步虚警率控制在$\alpha_{\rm step}=0.005$以约束累积风险；单频谐波回归扩展为多频联合拟合，以SVD替代正规方程求逆，监控设计矩阵条件数；BIC自动定阶——仅当$\Delta$BIC$\ge10$才保留候选分量。针对近频簇，先用细网格定位最强分量，剥离后扫描残差弱峰，由二源联合精修和BIC决定是否拆分为两个分量。合成数据近频扫描确定辨识极限，极端工况验证适用边界。
+
+\subsection{问题四的分析}
+问题四要求为最多3个加速度传感器设计最优布局，最大化综合检测概率并最小化误报率。核心难点在于：(1) 题目未提供设备几何、材料和传播路径参数，无法计算连续空间中的全局最优坐标，任何布局结论必须声明参数化模型范围；(2) 信号传播涉及距离衰减、方向性敏感度和模态耦合，不同测点对各频率的响应差异显著，最优布局不从直觉得出；(3) 检测概率与误报率相互制约——布点过密使响应冗余，浪费通道却不提升检测能力；(4) 仅允许3个传感器，从$L$个候选点选最优三元组的搜索空间为$O(L^3)$；(5) 传播响应和噪声存在不确定性，标称最优在增益/相位扰动和相关噪声下可能退化。
+
+经验布点缺乏定量依据。振型驱动方法依赖有限元模型，面向模态识别而非微弱信号检测。D最优/A最优等经典准则\upcite{kammer1991sensor}以回归参数估计精度为目标，在多分量检测场景需改造——本题目标是各分量检出概率而非单一估计精度。
+
+本文以参数化结构示例（V1模型，无量纲坐标，不代表真实安装尺寸）将连续布局问题离散化：在6个区域生成120个候选点，以复响应矩阵描述各点对4个已知分量的传播增益和相位延迟；按白化响应预筛选为40个互补低噪点；定义解析评分$J_{\rm ana}$（噪声加权非中心参数+信息矩阵特征值-冗余惩罚），贪心搜索后枚举全部$\binom{40}{3}=9880$个三元组合；对靠前布局在多个SNR下执行Monte Carlo验证，每次试验施加对数正态增益扰动（$\sigma=0.15$）和相位扰动（$\sigma=0.20$ rad），噪声用$\rho=0.30$的相关高斯模型，按$J_{\rm MC}$（平均检出率+最弱分量覆盖率-误报超额惩罚）重新排序。两阶段的意义：解析评分利用标称模型快速缩小搜索范围，Monte Carlo评分在随机扰动下检验鲁棒性。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{q_all_problem_relation}
+    \caption{四问问题关联总览。Q1检测→Q2恢复→Q3多源扩展→Q4传感器布局，构成从单频检测到系统部署的完整方法链。}
+    \label{fig:problem_relation}
+    {\small [AI-1] 优化配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+
+\section{模型假设}
+\begin{itemize}
+    \item [(1)] 假设噪声$n(t)$为零均值、独立同分布的高斯白噪声，即$n(t) \sim \mathcal{N}(0, \sigma^2)$。
+    \item [(2)] 假设故障信号为单一频率的稳定正弦波，频率$f_0$在观测区间内保持恒定。
+    \item [(3)] 假设观测数据时间轴均匀采样（$f_s = 100$ Hz），不存在丢点或时基抖动。
+    \item [(4)] 假设观测信号可能包含直流分量和线性趋势，但可通过线性去趋势预处理予以消除。
+    \item [(5)] 多周期分量情形下，假设各分量满足线性叠加，分量之间不产生互调。
+    \item [(6)] 不同测点对同一周期分量的敏感度差异可用复响应$h_{mk}$描述；Q4 V1验证中的测点噪声采用相关系数$\rho=0.30$的等相关高斯模型。
+\end{itemize}
+
+\section{符号说明}
+\begin{longtable}{cc}
+    \caption{符号说明}\label{tab:notation} \\
+    \toprule[1.5pt]
+    符号 & 含义\\
+    \midrule[1pt]
+    $x(t)$ & 采集到的含噪观测信号\\
+    $s(t)$ & 微弱故障周期信号\\
+    $n(t)$ & 加性噪声\\
+    $A$ & 故障信号振幅\\
+    $f_0$ & 故障特征频率（Hz）\\
+    $\phi_0$ & 故障信号初相（rad）\\
+    $f_s$ & 采样频率（100 Hz）\\
+    $N$ & 样本总数（40001）\\
+    $T(f)$ & 频率$f$处的GLRT检测统计量\\
+    $\eta_\alpha$ & 显著性水平$\alpha$下的蒙特卡洛检测门限\\
+    $P_{FA}$ & 虚警概率\\
+    $P_D$ & 检测概率\\
+    $\mathbf{X}_f$ & 频率$f$对应的正弦/余弦设计矩阵\\
+    $\mathbf{P}_f$ & 频率$f$对应的投影矩阵\\
+    $\hat{s}(t)$ & 恢复的故障信号波形\\
+    $K$ & 检测到的周期分量数量\\
+    $L$ & 候选传感器测点数量\\
+    $h_{mk}$ & 第$m$测点对第$k$周期分量的敏感度\\
+    $w_m$ & 第$m$测点的融合权重\\
+    $J(S)$ & 传感器布局$S$的综合评分\\
+    BIC & 贝叶斯信息准则（模型选择）\\
+    \bottomrule[1.5pt]
+\end{longtable}
+
+\section{问题一：故障频率检测模型的建立与求解}
+
+\subsection{数据预处理}
+原始采集信号可能包含直流偏置和传感器温漂引起的线性趋势，对信号做线性去趋势处理
+\begin{equation}
+y(t) = x(t) - (\hat{\beta}_0 + \hat{\beta}_1 t),
+\label{eq:detrend}
+\end{equation}
+其中$\hat{\beta}_0$和$\hat{\beta}_1$由最小二乘拟合得到。预处理后$y(t)$的均值为$-1.78 \times 10^{-19}$，标准差为$0.1031$。
+
+\subsection{GLRT检测框架}
+\subsubsection{二元假设检验}
+对预处理信号$\mathbf{y}$，在候选频率$f$处构造二元假设检验\upcite{kay1998fundamentals}：
+\begin{align}
+H_0 &: y(t_n) = n(t_n), \quad n(t_n) \sim \mathcal{N}(0, \sigma^2), \\
+H_1 &: y(t_n) = A\sin(2\pi f t_n + \phi) + n(t_n).
+\end{align}
+
+由于$H_1$下$A$和$\phi$为未知冗余参数，不存在一致最优检验。GLRT将未知参数用其最大似然估计替代后构造似然比，在高斯噪声下最大似然估计等价于最小二乘估计\upcite{poor2013detection}。
+
+\subsubsection{线性化与投影矩阵}
+利用三角恒等变换$A\sin(2\pi f t + \phi) = a\sin(2\pi f t) + b\cos(2\pi f t)$，其中$a = A\cos\phi$, $b = A\sin\phi$。对$N$个离散采样点构造$N \times 2$设计矩阵$\mathbf{X}_f$，其第$n$行为$[\sin(2\pi f t_n),\ \cos(2\pi f t_n)]$。定义投影矩阵：
+\begin{equation}
+\mathbf{P}_f = \mathbf{X}_f(\mathbf{X}_f^T \mathbf{X}_f)^{-1} \mathbf{X}_f^T.
+\end{equation}
+
+\subsubsection{扫描统计量}
+固定候选频率时，高斯未知方差模型的似然比是投影解释能量占总能量比例的单调函数\upcite{scharf2005statistical}。程序采用与FFT栅格归一化周期图一致的统计量
+\begin{equation}
+T(f) = \frac{\mathbf{y}^T \mathbf{P}_f \mathbf{y}}{\hat v},
+\qquad
+\hat v=\frac{1}{N}\|\mathbf y\|^2 ,
+\label{eq:glrt_stat}
+\end{equation}
+其中$\hat v$为去趋势后观测的总方差。该实现没有使用候选频率下的残差方差，因此不直接套用$2F(2,N-2)$分布；全文的检测门限均由同一定义下的纯噪声Monte Carlo最大值分布给出。分子表示$\mathbf y$在频率$f$的正弦/余弦子空间中的投影能量。
+
+\subsubsection{基于FFT的高效计算}
+取FFT栅格频率$f_k = k f_s/N$为候选集，利用$\|\mathbf{P}_{f_k} \mathbf{y}\|^2 \approx \frac{2}{N}|Y(f_k)|^2$，通过FFT将频率扫描阶段的耗时降至$O(N\log N)$：
+\begin{equation}
+T(f_k) \approx \frac{2|Y(f_k)|^2}{N \hat{\sigma}^2}.
+\end{equation}
+
+\subsubsection{蒙特卡洛门限确定}
+在多频点（$\sim2\times10^4$个）联合扫描的检测问题中，即使单频点虚警概率很低，多重比较也会使联合虚警率显著放大。借鉴雷达检测中的恒虚警率（CFAR）概念\upcite{rohling1983cfar}，采用纯噪声蒙特卡洛仿真确定经验门限：生成$M=500$组独立标准高斯白噪声（长度$N=40001$），对每组计算$T_{\max}^{(m)} = \max_{f_k} T^{(m)}(f_k)$，取上$\alpha=0.05$分位数作为门限。最终判决：
+\begin{equation}
+\boxed{\text{若 } T_{\max} = \max_{f} T(f) > \eta_{0.05},\ \text{则判定故障频率显著存在。}}
+\end{equation}
+
+该门限基于500次MC的95\%经验分位数，将虚警率校准至目标约5\%水平。需注意500次MC在尾部分位数处的估计精度有限（约25个样本落在尾部区域），因此门限本身具有抽样不确定性。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{q1_glrt_algorithm_flow}
+    \caption{Q1 GLRT检测算法流程：从数据预处理、FFT栅格扫描、蒙特卡洛门限校准到连续频率精修的完整链路。}
+    \label{fig:q1_flow}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+
+\subsection{频率精修}
+在粗估频率$f_{\text{coarse}}$的$\pm 0.01$ Hz邻域内，采用Brent有界标量优化\upcite{brent2013algorithms}最小化最小二乘拟合残差：
+\begin{equation}
+f_0 = \arg\min_{f \in [f_{\text{coarse}} - \Delta,\ f_{\text{coarse}} + \Delta]} \|\mathbf{y} - \mathbf{X}_f (\mathbf{X}_f^T\mathbf{X}_f)^{-1}\mathbf{X}_f^T\mathbf{y}\|^2,
+\end{equation}
+连续优化避免把频率估计限制在FFT离散栅格上，优化器输出容差约为$10^{-7}$ Hz。该数值容差不是统计估计精度；Q2区间估计显示统计不确定度约为$10^{-4}$ Hz量级。
+
+\subsection{检测结果}
+\subsubsection{主检测结果}
+在$[0.05, 49.5]$ Hz频段内，扫描统计量在$f = 1.99995$ Hz处取得最大值$T_{\max}=2328.66$，高于经验门限$\eta_{0.05}=25.10$，因此拒绝纯噪声假设。精修后：
+\begin{equation}
+\boxed{f_0 = 2.0000015\ \text{Hz}}.
+\end{equation}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.88\textwidth]{q1_glrt_statistic}
+    \caption{GLRT统计量$T(f)$在全频段分布（上）及2 Hz峰值放大（下）。红线为蒙特卡洛门限$\eta_{0.05}=25.10$。统计量在$f\approx2$ Hz处取得尖锐峰值，数值远超门限。}
+    \label{fig:glrt}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+
+\subsubsection{分段稳定性验证}
+Randall等指出\upcite{randall2001relationship}，故障识别不应依赖单次冲击或单个时间窗的峰值，而应考察周期结构在多时间窗下的稳定性。据此，将400秒数据划分为8个50秒独立分段，对每段执行完整GLRT检测。全部8段均成功检出，精修频率稳定在$2.0000\pm0.001$ Hz，GLRT统计量最低$226.42$仍约为分段门限$21.17$的10.7倍。
+
+\begin{longtable}{cccc}
+    \caption{8分段独立检测结果}\label{tab:segment}\\
+    \toprule
+    分段 & 精修频率(Hz) & GLRT统计量 & $|f-2.0|$偏差(Hz) \\
+    \midrule
+    1  & 2.00014 & 301.63 & $1.35\times10^{-4}$ \\
+    2  & 1.99997 & 284.56 & $3.18\times10^{-5}$ \\
+    3  & 2.00016 & 279.80 & $1.59\times10^{-4}$ \\
+    4  & 1.99963 & 349.42 & $3.69\times10^{-4}$ \\
+    5  & 2.00033 & 343.96 & $3.26\times10^{-4}$ \\
+    6  & 2.00004 & 296.14 & $4.39\times10^{-5}$ \\
+    7  & 2.00097 & 268.24 & $9.74\times10^{-4}$ \\
+    8  & 1.99921 & 226.42 & $7.93\times10^{-4}$ \\
+    \bottomrule
+\end{longtable}
+
+\subsubsection{与传统方法的合成数据对比}
+依据题设信号模型生成合成数据（$A=0.035$，频率随机偏离FFT栅格），在$N=40001$和相同Monte Carlo门限下比较两种写法。当前程序中的“FFT峰值”和“GLRT”使用相同的归一化周期图、门限与连续精修，因此8个SNR水平下的检测结果和频率误差相同；每个水平实际运行200次。两者在FFT栅格上属于同一检验。本文保留GLRT表述，是因为似然框架能够明确给出联合虚警率目标，并便于扩展到未知参数、多分量顺序检测和模型选择。
+
+\section{问题二：波形恢复模型的建立与求解}
+
+\subsection{谐波回归精修}
+以问题一检测的频率$f_0^{(1)}$为初值，建立谐波回归模型。对时间中心化处理$t_c = t - \bar{t}$以提高数值稳定性\upcite{scharf2005statistical}，构造设计矩阵：
+\begin{equation}
+\mathbf{X}(f) = [\sin(2\pi f t_c),\ \cos(2\pi f t_c),\ \mathbf{1}],
+\end{equation}
+通过最小二乘求解线性参数，再联合优化频率。注意的是联合优化步骤与Q1精修在无截距项时数学等价，Q2的方法论独立贡献在于后续的验证体系。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{q2_harmonic_recovery_flow}
+    \caption{Q2 谐波恢复算法流程：以Q1检测频率为初值，经谐波回归精修、参数不确定性量化和多重对照验证，最终给出恢复信号表达式。}
+    \label{fig:q2_flow}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+\subsection{全局恢复结果}
+\begin{equation}
+\boxed{\hat{s}(t) = 0.03519 \sin(2\pi \times 2.0000016\, t + 1.5736)}.
+\label{eq:recovered}
+\end{equation}
+
+\begin{table}[!htbp]
+\centering
+\caption{谐波回归全局恢复参数}\label{tab:global_params}
+\resizebox{\textwidth}{!}{\begin{tabular}{lcl}
+    \toprule
+    参数 & 估计值 & 说明 \\
+    \midrule
+    频率$f_0$ & 2.000001615 Hz & 较Q1进一步联合优化 \\
+    振幅$A$ & 0.0351903 & — \\
+    初相$\phi_0$ & 1.5735551 rad & 还原至$t=0$原点 \\
+    残差标准差 & 0.1000136 & $\approx$噪声水平 \\
+    解释方差 & 5.8294\% & 与-12.08 dB SNR一致 \\
+    估计输入SNR & -12.083 dB & $10\log_{10}(P_{\text{signal}}/P_{\text{noise}})$；对应功率比约16倍，幅度比约4倍 \\
+    2 Hz谱峰抑制 & 30.45 dB & 移除信号前后谱峰功率比 \\
+    \bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{q2_time_overlay_zoom}
+    \caption{预处理后原始信号（灰色）与谐波回归恢复的微弱正弦信号（红色）叠加对比（前10秒）。噪声功率约为信号功率的16倍（SNR$\approx-12$ dB），恢复的2 Hz正弦波形规则清晰。}
+    \label{fig:recovered}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{q2_spectrum_comparison}
+    \caption{恢复前后频谱对比。移除谐波回归拟合信号后，2 Hz处谱峰被抑制30.45 dB，从突出峰值降至与邻近噪声基底持平。}
+    \label{fig:spectrum_q2}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+\subsection{参数不确定性量化}
+采用基于局部协方差矩阵的多元正态抽样（$10000$次）近似参数估计的不确定性分布。该方法利用非线性最小二乘的局部线性化协方差矩阵$\hat{\sigma}^2(\mathbf{J}^T\mathbf{J})^{-1}$（其中$\mathbf{J}$为雅可比矩阵）\upcite{scharf2005statistical}，从多元正态分布抽取参数样本，以2.5\%和97.5\%经验分位数构造95\%区间。该计算不是样本或残差Bootstrap；其适用性依赖大样本局部线性近似和近高斯残差。
+
+\begin{longtable}{cccc}
+    \caption{参数不确定性区间（10000次局部渐近正态抽样）}\label{tab:ci}\\
+    \toprule
+    参数 & 点估计 & 95\%区间 & 抽样标准误 \\
+    \midrule
+    $f_0$ (Hz) & 2.00000162 & [1.99994563, 2.00005589] & $2.8\times10^{-5}$ \\
+    $A$ & 0.0351903 & [0.0338156, 0.0365625] & $7.07\times10^{-4}$ \\
+    $\phi_0$ (rad) & 1.5735551 & [1.4953321, 1.6550763] & $4.08\times10^{-2}$ \\
+    \bottomrule
+\end{longtable}
+\FloatBarrier
+\subsection{合成数据恢复误差}
+真实数据没有无噪声波形真值，因此表\ref{tab:q2_sim_error}仅在合成数据上报告波形RMSE和区间覆盖率；真实数据使用残差诊断、谱峰抑制和对照方法相关系数评价模型拟合。
+
+\begin{longtable}{cccccc}
+    \caption{Q2合成数据恢复误差与95\%区间覆盖率（各200次）}\label{tab:q2_sim_error}\\
+    \toprule
+    SNR/dB & 频率MAE/Hz & 波形RMSE & 频率覆盖率 & 振幅覆盖率 & 相位覆盖率 \\
+    \midrule
+    $-20$ & $5.62\times10^{-5}$ & 0.00201 & 94.5\% & 95.5\% & 95.0\% \\
+    $-15$ & $3.02\times10^{-5}$ & 0.00114 & 94.5\% & 97.5\% & 94.5\% \\
+    $-12$ & $2.19\times10^{-5}$ & 0.00079 & 94.5\% & 94.5\% & 96.0\% \\
+    $-10$ & $1.70\times10^{-5}$ & 0.00062 & 95.5\% & 96.0\% & 93.5\% \\
+    $-5$  & $9.46\times10^{-6}$ & 0.00034 & 93.5\% & 95.5\% & 94.5\% \\
+    \bottomrule
+\end{longtable}
+
+\subsection{公共频率模型验证}
+Randall等\upcite{randall2001relationship}强调故障识别依赖周期结构的一致性。为检验频率是否在整段观测中保持恒定，采用BIC准则比较公共频率模型与独立频率模型。BIC的计算方式为$N\log(\text{SSE}/N) + k\log N$，其中公共频率模型$k=1+3K$（1个公共频率+每段3个线性参数），独立频率模型$k=4K$（每段独立频率+3个线性参数）。400秒划分为8个50秒段，公共频率模型BIC = $-183955.07$低于独立频率模型的$-183885.11$，表明数据与公共频率模型更一致。需要指出BIC选优不等同于严格证明了频率恒定，它只能说明在候选模型集中，公共频率模型更节俭地描述了数据；如果真实频率存在微小的时变（变化量小于各段估计的统计不确定度），BIC可能检测不到。
+
+\subsection{一致性对照验证}
+\subsubsection{针对性窄带滤波}
+以$f_0=2$ Hz为中心设计FFT域零相位带通滤波器，从预处理信号中提取2 Hz分量。Smith等\upcite{smith2019optimal}指出围绕已知故障频率的针对性频带选择比完全盲检更稳健。窄带恢复波形与谐波回归波形在中央390秒区间的相关系数为$0.9096$，作为参照，该方法也将Q1频率信息作为先验使用。
+
+\subsubsection{奇异谱分析（SSA）}
+SSA\upcite{golyandina2001ssa}不预设正弦模型，从数据中自适应分解。经8 Hz抗混叠低通滤波和降至20 Hz采样后，测试三种窗口长度，按2 Hz附近的频谱能量集中度选取SSA分量重构信号。最优SSA窗口（2000点）与谐波回归波形的相关系数为0.9956。需说明SSA在分量选取时也参考了Q1的2 Hz频率信息（用于定义频谱能量集中度目标区间），因此适合作为一致性对照而非完全独立的盲验证。
+
+\begin{longtable}{ccccc}
+    \caption{SSA恢复结果与谐波回归对比}\label{tab:ssa}\\
+    \toprule
+    SSA窗口 & 估计$f$(Hz) & 估计$A$ & 与谐波回归相关系数 & RMSE \\
+    \midrule
+    500点(5 s)  & 2.0000046 & 0.03411 & 0.9821 & 0.00469 \\
+    1000点(10 s) & 2.0000025 & 0.03420 & 0.9915 & 0.00324 \\
+    2000点(20 s) & 2.0000006 & 0.03413 & 0.9956 & 0.00239 \\
+    \bottomrule
+\end{longtable}
+
+\subsection{模型充分性验证}
+为验证单正弦模型对单源数据的充分性，移除拟合的2 Hz分量后对残差再次执行全频GLRT扫描——残差最大$T(f)=17.46$（$f=18.53$ Hz），远低于蒙特卡洛门限$\eta_{0.05}=25.10$，无任何频率通过门限，表明无被遗漏的显著周期分量。残差统计矩均与白噪声一致：偏度$-0.010$、超额峰度$-0.009$、1--100阶自相关绝对值最大值$0.0129$；Jarque-Bera正态性检验$p=0.669$；Ljung-Box滞后100阶白噪声检验$p=0.418$。在$N=40001$的大样本下，以量级而非$p$值作为主要判断依据。
+
+\section{问题三：多周期分量分离与参数识别模型的建立与求解}
+
+\subsection{多峰顺序检测器}
+将问题一的单峰GLRT扩展为基于逐次干扰消除（SIC）的多峰顺序检测器。SIC源于通信领域的信号分离思想：对预处理信号$\mathbf{y}$执行GLRT全频段扫描取$T_{\max}=\max_f T(f)$；若$T_{\max} > \eta_\alpha$（每步虚警率$\alpha_{\text{step}}=0.005$），将对应频率$f_k$加入候选集；对当前全部$K$个频率进行多频联合谐波回归拟合，SVD分解计算最小二乘解并监控设计矩阵条件数；计算$\Delta\text{BIC} = \text{BIC}_{K-1} - \text{BIC}_K$，若$\Delta\text{BIC} \ge 10$则保留该分量并从残差中继续搜索，否则终止回退。
+
+SIC的固有局限是误差传播——早期分量的估计误差会传递给后续分量，且没有纠正早期错误的机制。针对近频簇，增加细网格扫描与二源联合非线性精修策略。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{q3_multisource_algorithm_flow}
+    \caption{Q3 多源分离算法流程：GLRT--SIC顺序检测、联合谐波回归与BIC自动定阶，含近频细网格扫描与二源联合精修策略。}
+    \label{fig:q3_flow}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+
+\subsection{真实数据分离结果}
+在data.xlsx"多源故障"sheet上，模型自动识别出\textbf{4个显著周期分量}，联合模型解释方差$11.92\%$，残差标准差$0.09988$。列归一化设计矩阵的条件数为1.00。四个分量中14 Hz振幅最大（0.0401），13 Hz振幅最小（0.0105），8 Hz为第二大幅度（0.0249）。单通道数据只能识别显著周期分量；缺少转速、齿数和传动比等机械先验时，无法唯一确定各分量对应的物理故障源。例如4 Hz和8 Hz可能是同一故障齿轮的基频与二次谐波。
+
+\begin{longtable}{ccccc}
+    \caption{多源数据自动识别的周期分量}\label{tab:q3_components}\\
+    \toprule
+    分量 & 频率(Hz) & 振幅 & 初相(rad) & 分量SNR(dB) \\
+    \midrule
+    1 & 3.999998 & 0.01910 & 1.3716 & -17.38 \\
+    2 & 7.999929 & 0.02489 & -2.9890 & -15.08 \\
+    3 & 13.000089 & 0.01050 & -2.1577 & -22.57 \\
+    4 & 14.000023 & 0.04005 & 0.1125 & -10.95 \\
+    \bottomrule
+\end{longtable}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{q3_time_separated_components}
+    \caption{分离出的4个周期分量时域波形（前2秒）。各分量振幅差异显著，14 Hz分量振幅最大（0.0401），13 Hz分量振幅最小（0.0105）。}
+    \label{fig:q3_components}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{q3_spectrum_before_after}
+    \caption{分离前后频谱对比。原始频谱中4个峰值被联合模型完整提取；移除所有分量后残差频谱接近平坦噪声基底。}
+    \label{fig:q3_spectrum}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+\subsection{分段频率稳定性验证}
+将400秒多源数据划分为8个50秒独立分段，对每段独立执行多峰SIC检测。4个周期分量在各分段中的估计值整体稳定，各频率的偏差范围分别为：4 Hz分量$\pm1.5\times10^{-4}$ Hz，8 Hz分量$\pm5.8\times10^{-4}$ Hz，13 Hz分量$\pm5.0\times10^{-3}$ Hz，14 Hz分量$\pm3.5\times10^{-3}$ Hz。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{q3_segment_frequency_stability}
+    \caption{8分段频率稳定性。4条水平线分别对应4个分量的全段联合估计频率。低频分量（4、8 Hz）比高频分量（13、14 Hz）更稳定。}
+    \label{fig:q3_segment}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+\subsection{多源数值仿真实验}
+按题设多正弦叠加模型生成合成数据（$M=4$分量，频率和振幅取真实数据估计值，总SNR从$-22$扫描至$0$ dB，$N=40001$，每个SNR条件200次MC重复）。表\ref{tab:q3_sim}、表\ref{tab:q3_resolution}和表\ref{tab:q3_extreme}来自\path{q3_results_complete}；完整流程误报率和条件化辨识界限详见\path{q3_results/experiments/c}与\path{q3_results/experiments/d}。（[AI-1] 辅助设计实验 C/D/E/F/G 参数网格、CSV 汇总逻辑与 resume 跳过机制，人工调整参数默认值和口径；[AI-2] 辅助扫描潜在代码问题，人工逐条核实真伪。）
+
+纯噪声首步GLRT扫描的经验越阈率约为$0.20\%$。实验C进一步对完整GLRT--SIC--联合精修--BIC流程运行1000次纯噪声试验，最终误定阶次数为$0/1000$，经验误报率为$0\%$，Wilson 95\%区间为$[0,0.383\%]$。该结果表示有限试验中未观察到最终伪分量，不表示真实误报概率等于零。分量数量识别正确率在$-16$至$-12$ dB区间上升：$-15$ dB时为$76.0\%$，$-12$ dB时为$98.0\%$，在SNR$\ge-10$ dB时达到$100\%$。
+
+\small
+\begin{longtable}{cccccc}
+    \caption{多分量分离仿真实验结果}\label{tab:q3_sim}\\
+    \toprule
+    总SNR(dB) & $P(K=\hat{K})$ & 95\%区间 & 条件频率MAE(Hz) & 条件振幅误差 & 波形RMSE \\
+    \midrule
+    -22 & 0.0\% & [0.0\%, 1.9\%] & --- & --- & 0.01633 \\
+    -20 & 1.5\% & [0.5\%, 4.3\%] & $1.93\times10^{-4}$ & 21.29\% & 0.01154 \\
+    -18 & 11.0\% & [7.4\%, 16.1\%] & $9.29\times10^{-5}$ & 13.84\% & 0.00900 \\
+    -16 & 49.5\% & [42.6\%, 56.4\%] & $9.64\times10^{-5}$ & 7.40\% & 0.00661 \\
+    -15 & 76.0\% & [69.6\%, 81.4\%] & $7.90\times10^{-5}$ & 6.02\% & 0.00469 \\
+    -14 & 91.5\% & [86.8\%, 94.6\%] & $7.86\times10^{-5}$ & 5.31\% & 0.00362 \\
+    -12 & 98.0\% & [95.0\%, 99.2\%] & $6.00\times10^{-5}$ & 4.46\% & 0.00258 \\
+    -10 & 100.0\% & [98.1\%, 100.0\%] & $4.99\times10^{-5}$ & 3.49\% & 0.00201 \\
+    -8  & 100.0\% & [98.1\%, 100.0\%] & $3.83\times10^{-5}$ & 2.73\% & 0.00158 \\
+    -6  & 100.0\% & [98.1\%, 100.0\%] & $3.02\times10^{-5}$ & 2.21\% & 0.00124 \\
+    -4  & 100.0\% & [98.1\%, 100.0\%] & $2.43\times10^{-5}$ & 1.77\% & 0.00100 \\
+    -2  & 100.0\% & [98.1\%, 100.0\%] & $1.82\times10^{-5}$ & 1.32\% & 0.00076 \\
+    0   & 100.0\% & [98.1\%, 100.0\%] & $1.50\times10^{-5}$ & 1.06\% & 0.00062 \\
+    \bottomrule
+\end{longtable}
+\normalsize
+\FloatBarrier
+\subsection{近频辨识极限实验}
+对双正弦混合信号进行频率间隔扫描实验（等幅和不等幅两种，每种$200$次MC重复，$f_s=100$ Hz，$N=40001$）。辨识成功需满足：自动识别两个分量、两频率误差均小于$\Delta f/4$、设计矩阵条件数$\le10^6$。表中条件数来自最终双频实值设计矩阵。程序先把每一列除以其二范数，再对列归一化矩阵进行SVD；该处理消除了不同列尺度对条件数的影响。表中报告成功与失败试验所得条件数的中位数，因此不能把它解释为固定真频率设计矩阵的理论条件数，也不能单独据此定义辨识界限。在$T=400$ s、残差标准差约$0.1$和当前振幅组合下，等幅双频从$\Delta f=0.002$ Hz起成功率达到$93.5\%$；不等幅组合在$0.003$ Hz时成功率为$97.5\%$。实验D进一步扫描弱分量SNR、振幅比和频率间隔，得到表\ref{tab:q3_conditional_resolution}（[AI-1] 辅助实现条件化实验 D 曲面扫描与数据表生成，人工验证）。这些数值是所测试网格上的条件化经验结果；它们依赖记录长度、相位分布、振幅比和成功判据，不构成算法的固定理论极限。
+
+\begin{longtable}{ccccc}
+    \caption{等幅双频辨识极限扫描}\label{tab:q3_resolution}\\
+    \toprule
+    $\Delta f$(Hz) & 成功率 & 95\%区间 & MUSIC成功率 & 条件数中位数 \\
+    \midrule
+    0.0010 & 11.5\% & [7.8\%, 16.7\%] & 0.0\% & 1.12 \\
+    0.0015 & 57.0\% & [50.1\%, 63.7\%] & 1.0\% & 1.53 \\
+    0.0020 & 93.5\% & [89.2\%, 96.2\%] & 20.0\% & 1.26 \\
+    0.0025 & 100.0\% & [98.1\%, 100.0\%] & 71.5\% & 1.02 \\
+    0.0030 & 100.0\% & [98.1\%, 100.0\%] & 97.0\% & 1.17 \\
+    0.0040 & 100.0\% & [98.1\%, 100.0\%] & 100.0\% & 1.21 \\
+    0.0050 & 100.0\% & [98.1\%, 100.0\%] & 100.0\% & 1.01 \\
+    0.0075 & 100.0\% & [98.1\%, 100.0\%] & 100.0\% & 1.01 \\
+    0.0100 & 100.0\% & [98.1\%, 100.0\%] & 100.0\% & 1.00 \\
+    \bottomrule
+\end{longtable}
+
+\begin{table}[!htbp]
+\centering
+\caption{条件化近频实验的90\%经验辨识间隔（每格200次）}\label{tab:q3_conditional_resolution}
+\resizebox{\textwidth}{!}{\begin{tabular}{cccc}
+    \toprule
+    弱分量SNR/dB & 振幅比$A_{\rm weak}:A_{\rm strong}$ & 90\%成功率对应的最小测试间隔/Hz & 说明 \\
+    \midrule
+    $-6$  & $1{:}1$  & 0.0020 & 等幅 \\
+    $-6$  & $1{:}3$  & 0.0025 & 中等不等幅 \\
+    $-6$  & $1{:}10$ & 0.0030 & 强弱悬殊 \\
+    $-12$ & $1{:}1$  & 0.0020 & 等幅 \\
+    $-12$ & $1{:}3$  & 0.0025 & 中等不等幅 \\
+    $-12$ & $1{:}10$ & 0.0030 & 强弱悬殊 \\
+    $-18$ & $1{:}1$  & 0.0020 & 等幅 \\
+    $-18$ & $1{:}3$  & 0.0025 & 中等不等幅 \\
+    $-18$ & $1{:}10$ & 0.0030 & 强弱悬殊 \\
+    \bottomrule
+\end{tabular}}
+\end{table}
+\FloatBarrier
+
+\subsection{极端工况验证}
+表\ref{tab:q3_extreme}展示模型在10种极端工况下的表现。完全同频的两个正弦在单通道下不可唯一分离，只能识别其矢量和；采用”不误拆为两个稳定分量”的标准时，同频与近似相消工况的正确不拆分率均为$100\%$。4 Hz与8 Hz谐波对在100次试验中均被识别为两个周期分量，但该结果不等价于两个物理故障源。八分量信号的频率为$3,5.5,8,11,13,16,21,29$ Hz，总SNR为$-10$ dB。脉冲噪声工况在标准差$0.09988$的高斯噪声上，每200个样本加入1个标准差为$12\times0.09988$的冲击；低频边界取$0.08,0.12$ Hz，高频边界取$48.8,49.2$ Hz，边界工况振幅均为$0.04,0.035$。这些参数限定了表中成功率的适用范围。
+
+\begin{longtable}{ccccc}
+    \caption{极端工况验证结果（各100次）}\label{tab:q3_extreme}\\
+    \toprule
+    工况 & 成功率 & 平均估计$\hat{K}$ & 频率MAE(Hz) & 可否辨识 \\
+    \midrule
+    SNR$=-25$ dB & 0\% & 1.17 & — & 是(信号弱) \\
+    SNR$=-30$ dB & 0\% & 0.13 & — & 是(信号弱) \\
+    非对称近频 & \textbf{100\%} & 2.00 & $2.4\times10^{-5}$ & 是 \\
+    完全同频 & \textbf{100\%} & 1.00 & $8.0\times10^{-3}$ & 否 \\
+    相位抵消 & \textbf{100\%} & 1.00 & $6.7\times10^{-3}$ & 否 \\
+    谐波对（4、8 Hz） & \textbf{100\%} & 2.00 & $3.3\times10^{-5}$ & 是 \\
+    八分量信号$K=8$ & \textbf{100\%} & 8.00 & $5.5\times10^{-5}$ & 是 \\
+    脉冲噪声 & \textbf{100\%} & 4.00 & $5.4\times10^{-5}$ & 是 \\
+    低频边界 & \textbf{100\%} & 2.00 & $2.5\times10^{-5}$ & 是 \\
+    高频边界 & \textbf{100\%} & 2.00 & $1.8\times10^{-5}$ & 是 \\
+    \bottomrule
+\end{longtable}
+
+\subsection{残差诊断}
+对Q3分离4个分量后的残差进行诊断。残差偏度为$-0.0143$，超额峰度为$-0.00365$；1--100阶自相关绝对值的最大值为$0.01542$（滞后21阶），100个滞后中有3个超出逐阶近似$95\%$参考界$\pm0.00980$。Ljung--Box联合检验得到$Q(100)=86.43$、$p=0.8312$，未拒绝残差无自相关的原假设；Jarque--Bera检验统计量为$1.382$、$p=0.5010$，未拒绝正态性。因而残差可近似视为高斯白噪声，未发现明显偏离模型假设的证据。Q3模型仅解释了$11.92\%$的总方差，检验结果支持剩余波动主要表现为噪声，但不能证明其中绝对不存在未被正弦模型捕捉的微弱结构。
+
+\section{问题四：传感器布局优化模型的建立与求解}
+
+\subsection{候选测点与信号传播模型}
+V1模型在轴承左区、轴承右区、齿轮箱左区、齿轮箱右区、输入轴区和输出轴区生成120个候选点。坐标为无量纲参数化结构坐标，不代表真实机器安装尺寸。候选点位置围绕各区域中心按半径$0.08,0.13,0.18,0.23$的环带生成，并加入竖向随机扰动；编号能被17整除的点除特定区域外视为不可安装。第$m$点的观测模型为
+
+\begin{equation}
+y_m(t) = \sum_{k=1}^{4} |h_{mk}| A_k \sin(2\pi f_k t + \phi_k + \arg h_{mk}) + n_m(t),
+\end{equation}
+
+其中$h_{mk}$为复响应，$n_m(t)$为测点噪声。程序使用Q3的完整估计值
+\begin{align*}
+\boldsymbol f&=(3.999998,7.999929,13.000089,14.000023)\ {\rm Hz},\\
+\boldsymbol A&=(0.019103,0.024889,0.010503,0.040053).
+\end{align*}
+正文中的整数频率仅用于显示。设候选点到第$k$个参数化源的距离为$d_{mk}$、表面法向量为$\boldsymbol n_m$、传播方向为$\boldsymbol u_{mk}$，V1响应写为
+\begin{align}
+h_{mk}={}&\left(0.55+0.45|\boldsymbol n_m^\mathsf T\boldsymbol u_{mk}|\right)
+\left[1+0.20\cos\{0.73(r_m+1)(k+1)\}\right]\notag\\
+&\times\frac{\exp(-0.38d_{mk})}{d_{mk}^{0.65}}
+\exp\!\left\{\mathrm i\left(1.15f_kd_{mk}+0.23r_m(k+1)\right)\right\}.
+\end{align}
+式中$r_m$为区域编号，上式相邻因子均为乘法。
+
+各区域基准噪声倍率依次为$0.95,1.05,0.88,1.20,1.30,0.98$，并叠加标准差为8\%的点间扰动。程序以$|h_{mk}|/\sigma_m$构造白化响应，按最弱分量响应和平均响应预筛选，同时剔除平方余弦相似度超过0.97的冗余点，最终保留40个候选点。
+
+\subsection{多传感器加权融合检测}
+对任一三点布局$S$，每个测点计算4个目标频率上的归一化投影统计量$T_m(f_k)$。V1程序采用噪声方差倒数权重：
+\begin{equation}
+T_{\text{fused}}(f_k) = \sum_{m\in S} w_m T_m(f_k), \quad w_m = \frac{1/\hat{\sigma}_m^2}{\sum_{j\in S} 1/\hat{\sigma}_j^2},
+\end{equation}
+单点统计量已经按噪声方差归一化，因此第二次加权属于V1的工程启发式设计，不是严格联合GLRT。程序对每个布局在相同权重和噪声相关模型下重新执行300次纯噪声门限校准，以避免直接套用单点统计量分布。本文只报告该V1策略的经验性能，不声称它是所有融合权重中的理论最优解。
+
+\subsection{布局评分函数与优化}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{q4_sensor_layout_algorithm_flow}
+    \caption{Q4 传感器布局优化算法流程：候选点生成→白化预筛选→组合搜索→Monte Carlo随机扰动验证→最优布局排序。}
+    \label{fig:q4_flow}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+V1分两阶段评分。解析筛选阶段令$\tilde h_{mk}=h_{mk}/\sigma_m$，先计算噪声加权非中心参数$\lambda_k(S)$、信息矩阵$\boldsymbol G_S=\tilde{\boldsymbol H}_S^H\tilde{\boldsymbol H}_S$和响应冗余度$R(S)$。解析目标为
+\begin{equation}
+J_{\rm ana}(S)=\lambda_{\min}^{\rm robust}
++0.10\bar{\lambda}
++0.002\log\!\left(1+\operatorname{tr}\boldsymbol G_S\right)\bar{\lambda}
++0.002\lambda_{\min}(\boldsymbol G_S)\bar{\lambda}
+-0.03R(S)\bar{\lambda},
+\end{equation}
+其中$\lambda_{\min}^{\rm robust}=\min_k\lambda_k(S)[1-0.20R(S)]$，$\bar\lambda$为4个分量的平均非中心参数。120点预筛选为40点后，先通过贪心搜索与单点交换缩小范围，再枚举全部$\binom{40}{3}=9880$个三点组合。解析目标最高的布局为\texttt{p105+p074+p098}，贪心加交换所得目标值比完整枚举最优值低3.34\%。
+
+第二阶段对解析目标靠前布局和基线布局执行SNR$=-25,-20,-15,-12,-10,-5$ dB的Monte Carlo验证，每个SNR运行100次信号试验和300次纯噪声试验。传播响应增益采用对数扰动（标准差0.15），相位扰动标准差为0.20 rad，测点噪声的等相关系数为0.30。验证评分为
+\begin{equation}
+J_{\rm MC}(S)=0.45\bar P_D+0.35P_D^{\rm low}
++0.20\overline{\min_k P_{D,k}}
+-2\max(0,\bar P_{FA}-0.05).
+\label{eq:q4_score}
+\end{equation}
+解析目标用于缩小搜索范围，最终布局以$J_{\rm MC}$排序。（[AI-1] 辅助修正目标函数代理：原混合不同量纲项，改为融合 GLRT 检测代理并按逆噪声方差加权，冗余度项按检测强度尺度缩放；人工独立设计原始框架并最终决策。AI 初版 swap 搜索无迭代上限，人工添加 max\_iter 和 warning。）
+
+\subsection{布局优化结果}
+Monte Carlo验证排名见表\ref{tab:q4_ranking}。解析目标排名第5的布局\texttt{p105+p074+p062}在随机扰动下取得最高验证评分，说明只按标称响应排序不足以替代随机验证。
+
+\begin{table}[!htbp]
+\centering
+\caption{Q4 V1布局Monte Carlo验证排名（前六名）}\label{tab:q4_ranking}
+\begin{tabular}{ccccc}
+    \toprule
+    排名 & 布局 & 区域 & 平均分量$P_D$ & $J_{\rm MC}$ \\
+    \midrule
+    1 & p105+p074+p062 & 右齿轮箱+左齿轮箱+左齿轮箱 & 61.88\% & 0.5220 \\
+    2 & p105+p074+p014 & 右齿轮箱+左齿轮箱+左齿轮箱 & 61.46\% & 0.5144 \\
+    3 & p117+p074+p002 & 右齿轮箱+左齿轮箱+左齿轮箱 & 62.04\% & 0.5087 \\
+    4 & p074+p021+p062 & 左齿轮箱+右齿轮箱+左齿轮箱 & 59.92\% & 0.5063 \\
+    5 & p105+p074+p098 & 右齿轮箱+左齿轮箱+左齿轮箱 & 58.92\% & 0.4926 \\
+    6 & p074+p021+p098 & 左齿轮箱+右齿轮箱+左齿轮箱 & 58.12\% & 0.4871 \\
+    \bottomrule
+\end{tabular}
+\end{table}
+\FloatBarrier
+
+\texttt{p105}位于右齿轮箱区，\texttt{p074}和\texttt{p062}位于左齿轮箱区。表\ref{tab:q4_points}给出其无量纲坐标和噪声倍率。
+
+\begin{longtable}{cccccc}
+    \caption{V1验证最优布局的候选点参数}\label{tab:q4_points}\\
+    \toprule
+    点号 & 区域 & $(x,y,z)$ & 噪声倍率 & 主要高响应频率 & 响应幅值 \\
+    \midrule
+    p105 & 右齿轮箱 & $(0.622,0.390,0.467)$ & 0.945 & 8,14 Hz & 0.628,0.903 \\
+    p074 & 左齿轮箱 & $(-0.488,0.360,0.545)$ & 0.710 & 4,13 Hz & 0.383,0.905 \\
+    p062 & 左齿轮箱 & $(-0.555,0.543,0.517)$ & 0.776 & 4,13 Hz & 0.360,1.017 \\
+    \bottomrule
+\end{longtable}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{q4_v1_validated_layout_heatmap}
+    \caption{V1候选点14 Hz白化响应分布及Monte Carlo验证最优布局\texttt{p105+p074+p062}。坐标为参数化模型的无量纲坐标。}
+    \label{fig:q4_ranking}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+
+\subsection{SNR性能对比实验}
+表\ref{tab:q4_snr}比较验证最优布局、一个固定随机抽取的三点基线和V0区域基线。固定随机基线只用于本次候选布局对照，不代表所有随机三点组合的平均性能。每个SNR下运行100次信号试验；误报率来自300次纯噪声试验，并标注Wilson 95\%区间。
+
+\begin{table}[!htbp]
+\centering
+\caption{不同布局方案在不同SNR下的检测性能}\label{tab:q4_snr}
+\resizebox{\textwidth}{!}{\begin{tabular}{cccccc}
+    \toprule
+    布局方案 & SNR/dB & 任一分量检出率 & 平均分量$P_D$ & 最弱分量$P_D$ & $P_{FA}$及95\%区间 \\
+    \midrule
+    \multirow{3}{*}{V1验证最优} & $-15$ & 100\% & 56.5\% & 28.0\% & 3.67\% [2.06\%,6.45\%] \\
+    & $-12$ & 100\% & 84.25\% & 59.0\% & 3.67\% [2.06\%,6.45\%] \\
+    & $-10$ & 100\% & 96.5\% & 87.0\% & 4.00\% [2.30\%,6.86\%] \\
+    \midrule
+    \multirow{3}{*}{固定随机三点基线} & $-15$ & 100\% & 43.5\% & 14.0\% & 3.33\% [1.82\%,6.03\%] \\
+    & $-12$ & 100\% & 66.5\% & 26.0\% & 2.67\% [1.36\%,5.17\%] \\
+    & $-10$ & 100\% & 83.5\% & 58.0\% & 5.00\% [3.05\%,8.08\%] \\
+    \midrule
+    \multirow{3}{*}{V0区域三点基线} & $-15$ & 100\% & 60.0\% & 22.0\% & 6.33\% [4.09\%,9.68\%] \\
+    & $-12$ & 100\% & 79.5\% & 50.0\% & 5.33\% [3.31\%,8.49\%] \\
+    & $-10$ & 100\% & 88.75\% & 66.0\% & 7.67\% [5.16\%,11.24\%] \\
+    \bottomrule
+\end{tabular}}
+\end{table}
+
+\FloatBarrier
+
+在SNR$=-12$ dB时，V1验证最优布局的平均分量检出率为$84.25\%$，固定随机三点基线为$66.5\%$，V0区域基线为$79.5\%$，这些是有限Monte Carlo下的数值差异。V1最优布局的平均误报率跨6个SNR水平为$5.17\%$，略高于5\%目标，已通过验证评分中的超额惩罚计入排名。
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{q4_v1_validated_pd_snr_curve}
+    \caption{Q4 V1 Monte Carlo验证最优布局的平均分量检出率随SNR变化。图中的随机三点曲线对应一次固定随机抽取。}
+    \label{fig:q4_pd_snr}
+    {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
+\end{figure}
+\FloatBarrier
+
+\subsection{故障分量覆盖均衡性}
+V1验证评分使用各SNR下最弱分量检出率的平均值约束不均衡性。验证最优布局的该指标为$47.0\%$，固定随机三点基线为$33.67\%$。在SNR$=-12$ dB时，最弱分量检出率分别为$59.0\%$和$26.0\%$。三个最优点中，\texttt{p105}对8 Hz和14 Hz响应较强，\texttt{p074}、\texttt{p062}对13 Hz响应较强并补充4 Hz响应；互补频响而非区域数量本身决定了V1排名。
+
+\subsection{鲁棒性验证}
+本节验证未单独设置”传播阴影”等离散场景，而是在每次信号试验中统一施加随机扰动：每个测点的复响应增益乘以对数正态因子$\exp\{\mathcal N(0,0.15^2)\}$，相位增加$\mathcal N(0,0.20^2)$ rad扰动，测点噪声采用相关系数$\rho=0.30$的等相关高斯模型。表\ref{tab:q4_ranking}中的验证排名已经包含这些扰动。由于只使用单一扰动强度，结果支持的是该设定下的经验稳定性，不能外推到任意安装误差或传播阴影。
+
+\subsection{布局策略的物理解释}
+V1最优点全部位于参数化齿轮箱区域。模型把13 Hz参数化源放在齿轮箱左侧附近、14 Hz源放在齿轮箱右侧附近，且齿轮箱区域的基准噪声倍率较低；这使齿轮箱点在白化响应上占优。三个点虽属于两个区域标签，但坐标和表面法向量不同，对4个频率的复响应也不同。该结果说明在当前参数化响应矩阵中，局部频响互补带来的收益超过跨区域布点收益。真实设备是否具有相同结论，需要用有限元频响或现场移动传感器标定替换$\{h_{mk}\}$后重新优化。
+
+\section{模型的检验}
+\subsection{四问结论的内在关联}
+四问构成一套渐进式方法链：Q1检测到$f_0=2.0000015$ Hz；Q2在此基础上精修参数并检验模型充分性；Q3把单分量方法扩展至$K=4$；Q4以Q3的完整频率和振幅估计构造V1参数化响应模型，验证最优布局为\texttt{p105+p074+p062}。Q1/Q2处理单源故障工作表，Q3处理多源故障工作表；前者的2 Hz分量没有出现在后者中，因此四问体现方法的逐步扩展，不表示同一设备工况的复杂度逐级增加。
+
+\subsection{噪声假设验证}
+Q1/Q2和Q3残差的偏度、超额峰度和自相关均接近零，直方图与高斯分布吻合。Q2残差的Jarque-Bera正态性检验$p=0.669$，Ljung-Box白噪声检验$p=0.418$（滞后100阶）；Q3残差的Jarque-Bera检验统计量$1.382$（$p=0.5010$），Ljung-Box检验$Q(100)=86.43$（$p=0.8312$），均未拒绝原假设。在$N=40001$的大样本下，微小的自相关也可能达到统计显著性，因此以偏度/峰度/自相关的量级而非p值作为主要判断依据。
+
+\subsection{参数敏感性分析}
+本文对GLRT总虚警率$\alpha$、BIC接受门限$\Delta$BIC、门限Monte Carlo校准次数$N_{\text{MC}}$和联合频率精修搜索半径$h$进行扫描，观察真实多源数据上的检测分量数、频率估计和最终BIC。总虚警率变化会同步改变每步虚警率，因此本实验没有把$\alpha_{\text{step}}$作为独立因素。该数据中的4个峰远离判决边界，以下结果只说明基线解在当前数据附近稳定，不能外推到低SNR或近频检测边界。
+
+\begin{table}[H]
+\centering
+\caption{参数敏感性分析结果}\label{tab:sensitivity}
+\resizebox{\textwidth}{!}{\begin{tabular}{cccccc}
+    \toprule
+    参数 & 扫描值 & 检测$K$ & 频率最大偏移/Hz & 最终BIC & 影响判定 \\
+    \midrule
+    \multirow{3}{*}{$\alpha$（总虚警率）}
+        & 0.01 & 4 & $<10^{-6}$ & $-184\,170$ & 变化小 \\
+        & 0.05（基线） & 4 & — & $-184\,170$ & — \\
+        & 0.10 & 4 & $<10^{-6}$ & $-184\,170$ & 变化小 \\
+    \midrule
+    \multirow{3}{*}{$\Delta$BIC（接受门限）}
+        & 6 & 4 & $<10^{-6}$ & $-184\,170$ & 变化小 \\
+        & 10（基线） & 4 & — & $-184\,170$ & — \\
+        & 20 & 4 & $<10^{-6}$ & $-184\,170$ & 变化小 \\
+    \midrule
+    \multirow{3}{*}{$N_{\text{MC}}$（门限校准次数）}
+        & 200 & 4 & $<10^{-6}$ & $-184\,170$ & 变化小 \\
+        & 500（基线） & 4 & — & $-184\,170$ & — \\
+        & 1000 & 4 & $<10^{-6}$ & $-184\,170$ & 变化小 \\
+    \midrule
+    \multirow{3}{*}{精修搜索半径$h$ / Hz}
+        & 0.003 & 4 & $6.4\times10^{-7}$ & $-184\,170$ & 变化小 \\
+        & 0.006（基线） & 4 & — & $-184\,170$ & — \\
+        & 0.012 & 4 & $8.9\times10^{-3}$ & $-179\,192$ & \textbf{敏感} \\
+    \bottomrule
+\end{tabular}}
+\end{table}
+
+\FloatBarrier
+
+(1) 检测分量数$K=4$在所测试的真实数据参数范围内保持不变，BIC和频率估计在$\alpha$、$\Delta$BIC、$N_{\text{MC}}$三个参数上变化很小。
+(2) GLRT门限的Monte Carlo稳定性分析表明：门限变异系数（CV）随 $N_{\text{MC}}$ 增大而下降——$N_{\text{MC}}=100$ 时 CV 为 $3\%\sim5\%$，增至 $500$ 时约 $1\%$，增至 $5000$ 时 $<0.5\%$。当前使用的 $N_{\text{MC}}=500$ 在计算成本与稳定性间取得了合理平衡。
+(3) 联合频率精修的搜索半径$h$是唯一表现出一定敏感性的参数：当$h$从0.006 Hz扩大至0.012 Hz时，优化器在部分分量上收敛至错误局部极小值，导致频率偏移约$0.009$ Hz且BIC变差。因此建议在本文数据上取$h\leq 0.006$ Hz；该经验范围不能作为其他数据的通用边界。
+(4) 因此，表\ref{tab:sensitivity}支持当前真实数据解的局部稳定性；检测边界附近的参数敏感性仍需另行评估。
+
+\subsection{与已有方法的定性对比}
+表\ref{tab:compare}将本文方法与工业界常用路线进行定性比较。
+
+\begin{table}[!htbp]
+\centering
+\caption{本文方法与传统方法的综合对比}\label{tab:compare}
+\resizebox{\textwidth}{!}{\begin{tabular}{ccccc}
+    \toprule
+    维度 & Kurtogram\upcite{antoni2006spectral} & MCKD\upcite{mcdonald2012mckd} & 随机共振\upcite{benzi1981mechanism} & 本文方法链 \\
+    \midrule
+    检测机理 & 冲击峭度 & 周期冲击解卷积 & 噪声增强传输 & 假设检验+似然比 \\
+    虚警控制 & 无显式控制 & 无 & 依赖参数 & 蒙特卡洛经验校准 \\
+    频率精度 & 频带级(Hz) & 依赖先验周期 & 依赖系统参数 & FFT粗估+精修 \\
+    不确定性量化 & 无 & 无 & 无 & 局部渐近正态区间 \\
+    计算效率 & 需迭代扫描 & 需迭代解卷积 & 需多次迭代 & FFT扫描阶段$O(N\log N)$ \\
+    对照验证 & 无 & 无 & 无 & SSA+窄带滤波对照 \\
+    \bottomrule
+\end{tabular}}
+\end{table}
+
+\FloatBarrier
+
+本文方法链的特点是：(1) 统计判决有明确的概率意义；(2) 虚警率可通过蒙特卡洛经验校准；(3) 提供参数不确定性量化和多种对照验证。Jia等\upcite{jia2015early}的MCKD+SK级联方案和Darong等\upcite{darong2018incipient}的自适应滤波+LMD方案主要面向冲击或非平稳特征；本文正弦回归模型则与题设的纯正弦形式直接匹配。
+
+\section{模型评价与改进}
+\subsection{模型的优点}
+\begin{itemize}
+    \item [(1)] \textbf{虚警率可经验校准。} 蒙特卡洛门限将多频点联合扫描的虚警率校准至目标水平，这是传统工业方法所不具备的关键能力\upcite{antoni2006spectral,smith2019optimal}。
+    \item [(2)] \textbf{多重验证体系。} SSA和窄带滤波从不同原理提供了一致性对照；残差GLRT扫描直接验证了模型的充分性；合成数据实验覆盖了广泛SNR条件。
+    \item [(3)] \textbf{参数不确定性量化。} 基于局部协方差矩阵的多元正态抽样（$10000$次）给出了频率、振幅、相位的区间估计。
+    \item [(4)] \textbf{自动分量数量确定。} BIC准则在Q3中自动确定分量数量；完整流程1000次纯噪声试验未产生最终伪分量，Wilson 95\%上界为$0.383\%$。
+    \item [(5)] \textbf{辨识界限定量化。} 通过系统近频扫描确定了$T=400$ s、噪声标准差约$0.1$条件下的经验辨识界限。
+\end{itemize}
+
+\subsection{模型的不足}
+\begin{itemize}
+    \item [(1)] 假设噪声为独立同分布高斯白噪声。工业场景可能具有色噪声或非高斯脉冲特性。
+    \item [(2)] 信号模型假设振幅和频率恒定，未考虑转速波动引起的频率时变。
+    \item [(3)] Q3的SIC顺序检测存在误差传播问题——早期分量的估计误差传递给后续分量，且缺乏纠正机制。
+    \item [(4)] 当前真实数据解在所测试的$\alpha$、$\Delta$BIC和$N_{\text{MC}}$范围内变化很小；该结论未覆盖低SNR检测边界。精修搜索半径$h=0.012$ Hz时出现错误局部极小。
+    \item [(5)] 单通道数据无法唯一确定周期分量与物理故障源的对应关系。
+\end{itemize}
+
+\subsection{模型的推广方向}
+\begin{itemize}
+    \item [(1)] \textbf{非高斯/色噪声扩展：} 将白噪声方差替换为噪声协方差矩阵估计（AR模型拟合），或采用Darong等\upcite{darong2018incipient}的自适应滤波作为预白化前端。
+    \item [(2)] \textbf{时变频率追踪：} 引入短时傅里叶变换，将GLRT统计量扩展至时间-频率平面，适应非稳态工况。
+    \item [(3)] \textbf{SIC替代方案：} 考虑LASSO（频率字典上一次稀疏回归选择所有分量）或RELAX（循环精化）以减少误差传播。
+    \item [(4)] \textbf{谐波族模型：} 引入$f_{k,h}=h\cdot f_k$约束，用BIC比较独立频率模型与谐波族模型，利用频率间的倍频关系提高分量归因的物理可解释性。
+\end{itemize}
+
+%参考文献
+\bibliographystyle{unsrt}
+\bibliography{refer}
+
+\vspace{1em}
+\noindent\textbf{AI工具引用：}
+\begin{description}
+    \item[AI-1] Codex，对话式编程代理，OpenAI，2026-06-19 至 2026-06-20（主力编程与建模工具）
+    \item[AI-2] Claude Code / 外部代码代理，具体模型以平台记录为准，2026-06-19 至 2026-06-20（高性能推理后端）
+    \item[AI-3] Undermind，检索与调研工具，Undermind，2026-06-19（文献检索与调研）
+\end{description}
+
+\newpage
+\begin{appendices}
+    \section{支撑材料列表}
+    \begin{longtable}{|c|>{\raggedright\arraybackslash}p{0.53\textwidth}|>{\raggedright\arraybackslash}p{0.25\textwidth}|}
+            \caption{支撑材料及其真实相对路径}\label{tab:supporting_files}\\
+            \hline
+            序号 & 文件名 & 材料说明 \\
+            \hline
+            1  & \path{q1_glrt_model.py} & 问题一GLRT检测入口 \\
+            \hline
+            2  & \path{q1_model_compare.py} & Q1统计量、门限与对比实验 \\
+            \hline
+            3  & \path{q1_glrt_results/q1_glrt_result.csv} & Q1检测数值结果 \\
+            \hline
+            4  & \path{q2_harmonic_recovery/run_q2.py} & 问题二谐波回归入口 \\
+            \hline
+            5  & \path{q2_harmonic_recovery/core.py} & Q2核心计算函数库 \\
+            \hline
+            6  & \path{q2_results/q2_global_parameters.csv} & Q2全局恢复参数 \\
+            \hline
+            7  & \path{q2_results/q2_bootstrap_ci.csv} & 局部渐近正态参数区间 \\
+            \hline
+            8  & \path{q3_multisource_separation/run_q3.py} & 问题三多分量分离入口 \\
+            \hline
+            9  & \path{q3_multisource_separation/experiments.py} & Q3仿真与极端工况实验 \\
+            \hline
+            10 & \path{q3_results_complete/q3_global_parameters.csv} & Q3全局参数 \\
+            \hline
+            11 & \path{q3_results_complete/q3_detected_components.csv} & Q3分量明细 \\
+            \hline
+            12 & \path{q3_results/experiments/c/paper/q3_experiment_c_null_false_alarm.csv} & Q3完整流程误报率 \\
+            \hline
+            13 & \path{q3_results/experiments/d/paper/q3_experiment_d_resolution_limits.csv} & Q3条件化辨识界限 \\
+            \hline
+            14 & \path{q3_results_complete/q3_extreme_summary.csv} & Q3极端工况汇总 \\
+            \hline
+            15 & \path{q4_adaptive_sensor_layout/run_q4_v1.py} & Q4 V1优化入口 \\
+            \hline
+            16 & \path{q4_results/paper/q4_v1_validated_layouts.csv} & Q4验证排名 \\
+            \hline
+            17 & \path{q4_results/paper/q4_v1_robust_detection.csv} & Q4 SNR与误报率结果 \\
+            \hline
+    \end{longtable}
+
+    \section{核心程序与复现信息}
+    本附录保留四问的数值计算主链和主要验证实验。数据读取、绘图、CSV写入和进程调度等工程代码见表\ref{tab:supporting_files}所列源文件。
+
+\textbf{代码性质声明：}四问的核心算法——GLRT统计量构造与门限推导、SIC顺序检测框架、BIC模型选择准则、传感器布局目标函数——均由参赛队独立设计与实现。AI工具（[AI-1]）的作用限于：对已有代码进行性能优化（缓存、向量化、并行调度）、数值边界保护、参数调优建议和代码审查辅助，所有AI建议均经人工逐条核实后采纳或拒绝（[AI-2] 辅助性能推理与审查）。附录各小节末尾标注了AI的具体辅助内容。
+
+    四问均使用固定随机种子：Q1为\texttt{20260619}，Q2--Q4为\texttt{20260620}。运行入口如下：
+    \begin{center}
+    \small
+    \begin{tabular}{clcl}
+        Q1 & \path{q1_glrt_model.py} & Q2 & \path{q2_harmonic_recovery/run_q2.py} \\
+        Q3 & \path{q3_multisource_separation/run_q3.py} & Q4 & \path{q4_adaptive_sensor_layout/run_q4_v1.py}
+    \end{tabular}
+    \end{center}
+
+    Q3每个SNR条件运行200次、近频网格每格200次、极端工况每类100次，使用8进程并行计算，完整结果见\path{q3_results_complete}。Q4每个SNR条件运行100次信号试验和300次纯噪声试验（门限校准300次），施加增益抖动0.15、相位抖动0.20 rad和噪声相关系数0.30，完整结果见\path{q4_results}。（[AI-1] 评估 cached 后端 vs dense vs chunksize 三种 CPU 优化方案，人工决策采纳多进程与缓存方向，暂未采纳 Numba、CuPy 等方案。）
+
+    \subsection{问题一：GLRT检测与连续频率精修}
+    对序列进行线性去趋势后，在FFT频率栅格上计算归一化GLRT统计量。纯噪声Monte Carlo最大值的经验分位数给出联合扫描门限，最后以有界一维最小二乘精修频率。以下代码分别摘自\path{q1_model_compare.py}和\path{q1_glrt/core.py}。
+
+    \lstinputlisting[firstline=29,lastline=50,firstnumber=29,caption={Q1配置与固定随机种子}]{code/q1_model_compare.py}
+    \lstinputlisting[firstline=70,lastline=141,firstnumber=69,caption={Q1正弦参数估计与频率精修}]{code/q1_model_compare.py}
+    \lstinputlisting[firstline=239,lastline=282,firstnumber=224,caption={Q1 GLRT统计量与Monte Carlo门限}]{code/q1_model_compare.py}
+    \lstinputlisting[firstline=277,lastline=296,firstnumber=262,caption={Q1检测判决}]{code/q1_model_compare.py}
+    \lstinputlisting[firstline=64,lastline=102,firstnumber=57,caption={Q1真实数据检测主流程}]{code/q1_glrt_core.py}
+    \lstinputlisting[firstline=236,lastline=289,firstnumber=221,caption={Q1 SNR仿真验证}]{code/q1_glrt_core.py}
+
+    {\small [AI-1] 优化 double-detrend 管线一致性，修正 FFT 基线门限与样本长度统一，人工验证数值一致性。}
+
+    \subsection{问题二：谐波回归与参数区间}
+    Q2围绕Q1频率初值建立正弦、余弦和常数项的线性回归，并对频率执行一维精修。参数区间由局部Jacobian协方差和固定种子的多元正态抽样得到。附录补充相位圆周区间、残差适用性检查、分段联合拟合和合成数据验证。代码摘自\path{q2_harmonic_recovery/core.py}。
+
+    \lstinputlisting[firstline=44,lastline=83,firstnumber=40,caption={Q2预处理与相位圆周区间保护}]{code/q2_harmonic_recovery_core.py}
+    \lstinputlisting[firstline=78,lastline=142,firstnumber=71,caption={Q2谐波回归与频率精修}]{code/q2_harmonic_recovery_core.py}
+    \lstinputlisting[firstline=135,lastline=232,firstnumber=126,caption={Q2残差统计与模型适用性检查}]{code/q2_harmonic_recovery_core.py}
+    \lstinputlisting[firstline=227,lastline=279,firstnumber=210,caption={Q2参数协方差与区间抽样}]{code/q2_harmonic_recovery_core.py}
+    \lstinputlisting[firstline=274,lastline=337,firstnumber=257,caption={Q2分段公共频率联合拟合}]{code/q2_harmonic_recovery_core.py}
+    \lstinputlisting[firstline=581,lastline=642,firstnumber=552,caption={Q2合成数据恢复与区间覆盖验证}]{code/q2_harmonic_recovery_core.py}
+
+    {\small [AI-1] 优化相位 CI 圆环判断、BIC 零残差保护、SSA 窗口越界保护，人工验证数值一致性。}
+
+    \subsection{问题三：GLRT--SIC与BIC自动定阶}
+    Q3用多谐波联合最小二乘估计全部分量，并检查缩放设计矩阵的秩与条件数。每轮在当前残差上执行GLRT扫描，对候选频率联合精修；只有BIC至少改善10且设计矩阵不过度病态时才接受新分量。附录给出与Q1一致的门限、近频候选生成、条件门限、局部二源解析器以及SNR与近频试验。代码摘自\path{q3_multisource_separation/core.py}和\path{q3_multisource_separation/experiments.py}。
+
+    \lstinputlisting[firstline=29,lastline=72,firstnumber=29,caption={Q3 GLRT配置、统计量与门限校准}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=91,lastline=130,firstnumber=89,caption={Q3 BIC、设计矩阵与病态诊断}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=125,lastline=174,firstnumber=123,caption={Q3联合谐波拟合、BIC与病态诊断}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=207,lastline=295,firstnumber=205,caption={Q3联合频率精修与残差GLRT扫描}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=290,lastline=311,firstnumber=288,caption={Q3残差峰与近频拆分候选生成}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=306,lastline=406,firstnumber=304,caption={Q3 SIC+BIC自动定阶主流程}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=626,lastline=780,firstnumber=610,caption={Q3条件门限与局部近频二源解析}]{code/q3_multisource_separation_core.py}
+    \lstinputlisting[firstline=69,lastline=209,firstnumber=68,caption={Q3 SNR试验与近频分辨率试验}]{code/q3_multisource_separation_experiments.py}
+
+    {\small [AI-1] 优化近频联合精修策略（SIC golden-section + 联合 L-BFGS-B）、cached backend、并行调度，人工验证数值一致性。}
+
+    \subsection{问题四：V1布局搜索与Monte Carlo重排}
+    Q4 V1用参数化位置、表面法向量和源点距离生成复响应。预筛选同时考虑白化检测强度和响应冗余，解析评分用于枚举三点组合；正式结论再按多SNR Monte Carlo检出率、最弱分量覆盖和误报超额惩罚重新排序。附录补充完整配置、贪心与交换搜索、相关噪声与响应扰动、门限校准及检测试验。代码分别摘自\path{q4_adaptive_sensor_layout/core.py}和\path{q4_adaptive_sensor_layout/experiments.py}。
+
+    \lstinputlisting[firstline=35,lastline=97,firstnumber=35,caption={Q4 V1配置与数据结构}]{code/q4_adaptive_sensor_layout_core.py}
+    \lstinputlisting[firstline=135,lastline=198,firstnumber=133,caption={Q4 V1传播响应与候选点生成}]{code/q4_adaptive_sensor_layout_core.py}
+    \lstinputlisting[firstline=206,lastline=315,firstnumber=193,caption={Q4单点评分、预筛选与解析布局目标}]{code/q4_adaptive_sensor_layout_core.py}
+    \lstinputlisting[firstline=310,lastline=372,firstnumber=297,caption={Q4贪心、交换与三点穷举搜索}]{code/q4_adaptive_sensor_layout_core.py}
+    \lstinputlisting[firstline=409,lastline=500,firstnumber=391,caption={Q4相关噪声、响应扰动与检测门限}]{code/q4_adaptive_sensor_layout_core.py}
+    \lstinputlisting[firstline=105,lastline=191,firstnumber=101,caption={Q4多SNR信号与纯噪声检测试验}]{code/q4_adaptive_sensor_layout_experiments.py}
+    \lstinputlisting[firstline=186,lastline=226,firstnumber=180,caption={Q4 Monte Carlo验证评分与最终重排}]{code/q4_adaptive_sensor_layout_experiments.py}
+    \lstinputlisting[firstline=221,lastline=306,firstnumber=215,caption={Q4 V1端到端布局与验证实验编排}]{code/q4_adaptive_sensor_layout_experiments.py}
+
+    {\small [AI-1] 优化目标函数代理（融合 GLRT 检测代理与逆噪声方差加权）、swap 迭代上限、prescreen 兜底策略，人工验证数值一致性。}
+\end{appendices}
+
+\end{document}
