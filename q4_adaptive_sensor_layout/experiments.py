@@ -99,6 +99,8 @@ def _candidate_rows(points) -> list[dict]:
 
 
 def _run_detection_trials(points, layout, layout_label: str, snr_levels: tuple[float, ...], runs: int, false_alarm_runs: int, cfg: Q4V1Config) -> list[dict]:
+    """Monte Carlo 检测试验：信号检出 + 纯噪声误报，SNR 多级扫描。"""
+    # [AI-1] 辅助信号/纯噪声双循环编排与融合统计量门限比较
     rows: list[dict] = []
     t = default_time_axis(cfg)
     sin_basis, cos_basis = basis_matrices(t)
@@ -178,6 +180,8 @@ def summarize_detection(rows: list[dict]) -> list[dict]:
 
 
 def summarize_validated_layouts(detection_summary: list[dict], cfg: Q4V1Config) -> list[dict]:
+    """Monte Carlo 验证评分 J_MC：平均检出率 + 最弱分量覆盖 − 误报超额惩罚。"""
+    # [AI-1] 辅助验证评分公式权重设计与 ranking 排序
     grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for row in detection_summary:
         grouped[(row["layout"], row["regions"], row["benchmark"])].append(row)
@@ -217,7 +221,7 @@ def run_experiments(
     grid_size: int,
     top_layouts: int,
     runs: int,
-    false_alarm_runs: int,
+    false_alarm_runs: int,  # [AI-1] 辅助 profile 参数映射与端到端编排
     snr_levels: tuple[float, ...] = SNR_LEVELS,
     profile: str = "smoke",
 ) -> dict:

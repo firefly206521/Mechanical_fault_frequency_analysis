@@ -127,6 +127,8 @@ def run_resolution_trial(
     music_grid_step: float,
     conditional_threshold: float | None = None,
 ) -> dict:
+    """近频辨识单次试验：双正弦近频分离 + MUSIC 对照。"""
+    # [AI-1] 辅助近频网格扫描与 conditional_threshold 条件门限
     amplitudes = AMPLITUDE_CASES[amplitude_case]
     frequencies = np.asarray([13.5 - separation / 2.0, 13.5 + separation / 2.0])
     case_id = 0 if amplitude_case == "equal" else 1

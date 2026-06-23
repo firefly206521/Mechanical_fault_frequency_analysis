@@ -56,17 +56,18 @@ def require_frequency_mask(freqs: np.ndarray, cfg: Config) -> np.ndarray:
 
 def run_glrt_q1(cfg: Config) -> dict[str, float | bool | str]:
     """Q1 GLRT 主流程：加载→去趋势→周期图扫描→MC 门限→频率精修→信号恢复。"""
+    # [AI-1] 辅助编排完整 GLRT 检测管线
     t, x, fs = load_q1_data(cfg)
-    y = preprocess(x)
+    y = preprocess(x)  # [AI-1] 辅助确认去趋势预处理步骤
     freqs, stat = glrt_stat_from_fft(x, fs, cfg)
     mask = require_frequency_mask(freqs, cfg)
     search_freqs = freqs[mask]
     search_stat = stat[mask]
-    best_local = int(np.argmax(search_stat))
+    best_local = int(np.argmax(search_stat))  # [AI-1] 辅助频率掩码 argmax 粗定位
     coarse_freq = float(search_freqs[best_local])
     score = float(search_stat[best_local])
-    threshold = estimate_glrt_threshold(len(y), fs, cfg)
-    refined = refine_frequency(t, y, coarse_freq, fs)
+    threshold = estimate_glrt_threshold(len(y), fs, cfg)  # [AI-1] 辅助纯噪声 MC 门限校准
+    refined = refine_frequency(t, y, coarse_freq, fs)  # [AI-1] 辅助 Brent 有界连续频率精修
     model_at_refined = estimate_sinusoid(t, y, refined["frequency"])
     detected = score >= threshold
 
@@ -227,18 +228,19 @@ def run_fft_glrt_simulation(
     sim_mc: int,
 ) -> pd.DataFrame:
     """Monte Carlo 对比仿真：在 −25 至 −5 dB 范围比较 FFT 与 GLRT 的检测概率。"""
+    # [AI-1] 辅助 SNR 扫描网格与随机种子偏移设计
     rng = np.random.default_rng(cfg.random_seed + 99)
     snr_values = [-25.0, -22.0, -20.0, -18.0, -15.0, -12.0, -10.0, -5.0]
-    sim_n = n
-    sim_cfg = Config(**{**cfg.__dict__, "glrt_mc": max(120, min(cfg.glrt_mc, 300))})
+    sim_n = n  # [AI-1] 辅助统一仿真样本数 N=40001
+    sim_cfg = Config(**{**cfg.__dict__, "glrt_mc": max(120, min(cfg.glrt_mc, 300))})  # [AI-1] 辅助仿真内 MC 门限自适应缩减
     rows = []
     tolerance = 0.05
 
     for snr_db in snr_values:
         per_method = {"FFT peak": {"success": [], "error": []}, "GLRT": {"success": [], "error": []}}
-        half_bin = fs / (2.0 * sim_n)  # random non-grid frequency offset per trial
+        half_bin = fs / (2.0 * sim_n)
         for _ in range(sim_mc):
-            f0_trial = f0 + rng.uniform(-half_bin, half_bin)
+            f0_trial = f0 + rng.uniform(-half_bin, half_bin)  # [AI-1] 辅助随机非栅格频率偏移，避免栅格偏好
             sim_t, sim_x = synthetic_signal(fs, sim_n, f0_trial, amplitude, snr_db, rng)
             fft_res = fft_peak_detect_signal(sim_t, sim_x, fs, sim_cfg)
             fft_error = abs(float(fft_res["refined_frequency_hz"]) - f0_trial)
@@ -256,7 +258,7 @@ def run_fft_glrt_simulation(
                 {
                     "method": method,
                     "snr_db": snr_db,
-                    "p_detect": float(np.mean(values["success"])),
+                    "p_detect": float(np.mean(values["success"])),  # [AI-1] 辅助检测概率与频率误差统计汇总
                     "mean_abs_frequency_error_hz": float(np.mean(errors)),
                     "std_abs_frequency_error_hz": float(np.std(errors)),
                     "mc_runs": sim_mc,

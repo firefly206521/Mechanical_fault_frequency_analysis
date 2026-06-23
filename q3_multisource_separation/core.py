@@ -26,6 +26,7 @@ from q2_harmonic_recovery.core import (
 SPLIT_MULTIPLIERS = np.asarray([0.10, 0.15, 0.25, 0.40, 0.65, 1.00, 1.50, 2.00])
 
 
+# [AI-1] 辅助 Q3 GLRT 参数接口设计：每步 α_step=0.005 控制累积虚警
 @dataclass(frozen=True)
 class GLRTConfig:
     """Dependency-light copy of the current Q1 GLRT parameter interface."""
@@ -40,6 +41,8 @@ class GLRTConfig:
 
 
 def q1_compatible_glrt_stat(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+    """GLRT 统计量：手动 double-detrend 替代 scipy.detrend，与 Q1 保持精确兼容。"""
+    # [AI-1] 辅助手动线性去趋势实现，保证跨模块统计量数值一致
     index = np.arange(len(x), dtype=float)
     centered_index = index - np.mean(index)
     centered_x = x - np.mean(x)
@@ -47,7 +50,7 @@ def q1_compatible_glrt_stat(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.nd
     y = centered_x - slope * centered_index
     spec = np.fft.rfft(y)
     frequencies = np.fft.rfftfreq(len(y), 1.0 / fs)
-    statistic = 2.0 * np.abs(spec) ** 2 / (len(y) * np.var(y) + np.finfo(float).eps)
+    statistic = 2.0 * np.abs(spec) ** 2 / (len(y) * np.var(y) + np.finfo(float).eps)  # [AI-1] 辅助 epsilon 防止零方差
     return frequencies, statistic
 
 
@@ -87,11 +90,13 @@ def load_multi_source(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
 
 
 def compute_bic(n: int, sse: float, parameter_count: int) -> float:
-    return float(n * math.log(max(sse / n, 1e-300)) + parameter_count * math.log(n))
+    """BIC 准则：零残差保护避免 log(0)。"""
+    return float(n * math.log(max(sse / n, 1e-300)) + parameter_count * math.log(n))  # [AI-1] 辅助零残差 epsilon 保护
 
 
 def _design_matrix(t: np.ndarray, frequencies: Iterable[float]) -> tuple[np.ndarray, float]:
     """构建多频设计矩阵：每频率一组 sin/cos 列 + offset 列，返回时间中心化矩阵。"""
+    # [AI-1] 辅助向量化设计矩阵构建，支持任意数量频率分量
     frequencies = np.asarray(list(frequencies), dtype=float)
     center = float(np.mean(t))
     tc = t - center
@@ -104,8 +109,9 @@ def _design_matrix(t: np.ndarray, frequencies: Iterable[float]) -> tuple[np.ndar
 
 
 def design_diagnostics(design: np.ndarray, rcond: float = 1e-12) -> dict:
+    """列归一化 SVD 诊断：条件数、秩、病态标志。"""
     norms = np.linalg.norm(design, axis=0)
-    scaled = design / np.maximum(norms, np.finfo(float).eps)
+    scaled = design / np.maximum(norms, np.finfo(float).eps)  # [AI-1] 辅助列归一化消除尺度对条件数影响
     singular = np.linalg.svd(scaled, compute_uv=False)
     threshold = rcond * singular[0]
     rank = int(np.sum(singular > threshold))
@@ -123,6 +129,7 @@ def design_diagnostics(design: np.ndarray, rcond: float = 1e-12) -> dict:
 
 def multi_harmonic_fit(t: np.ndarray, y: np.ndarray, frequencies: Iterable[float]) -> dict:
     """多频联合最小二乘：对给定频率集做多谐波回归，返回各分量参数、BIC 和条件数诊断。"""
+    # [AI-1] 辅助联合谐波回归，SVD 求解替代正规方程
     frequencies = np.sort(np.asarray(list(frequencies), dtype=float))
     design, center = _design_matrix(t, frequencies)
     beta, _, rank, _ = np.linalg.lstsq(design, y, rcond=1e-12)
@@ -213,6 +220,7 @@ def refine_joint_frequencies(
     fit_backend: str = "dense",
 ) -> dict:
     """坐标下降联合精修：逐维黄金分割搜索，多轮迭代直至频率收敛或 maxiter 耗尽。"""
+    # [AI-1] 辅助 cached backend 实现，通过预计算 Gram 矩阵加速联合精修
     if fit_backend not in {"dense", "cached"}:
         raise ValueError("fit_backend must be 'dense' or 'cached'")
     seeds = np.sort(np.asarray(list(seeds), dtype=float))
@@ -266,6 +274,7 @@ def refine_joint_frequencies(
 
 def glrt_scan(residual: np.ndarray, fs: float, cfg: GLRTConfig, fitted_parameter_count: int) -> dict:
     """残差 GLRT 扫描：对当前残差计算周期图，定位最强剩余峰，用于 SIC 下一轮候选。"""
+    # [AI-1] 辅助 SIC 残差重扫描管线，支持条件门限回退
     frequencies, statistic = q1_compatible_glrt_stat(residual, fs)
     mask = (frequencies >= cfg.f_min) & (frequencies <= cfg.f_max)
     corrected = statistic
@@ -287,6 +296,8 @@ def glrt_scan(residual: np.ndarray, fs: float, cfg: GLRTConfig, fitted_parameter
 
 
 def _candidate_seed_sets(current: np.ndarray, new_peak: float, duration: float) -> list[tuple[str, np.ndarray]]:
+    """生成候选种子集：残差峰添加 + 近频拆分候选。"""
+    # [AI-1] 辅助近频拆分网格设计（SPLIT_MULTIPLIERS 控制分离间隔）
     candidates: list[tuple[str, np.ndarray]] = []
     if len(current) == 0 or np.min(np.abs(current - new_peak)) > 1e-7:
         candidates.append(("residual_peak", np.sort(np.r_[current, new_peak])))
@@ -312,6 +323,7 @@ def detect_multitone(
     fit_backend: str = "dense",
 ) -> tuple[dict, list[dict]]:
     """SIC+BIC 自动定阶：循环 {GLRT扫描残差→联合精修→BIC判据(Δ≥10)→接受/停止}。"""
+    # [AI-1] 辅助 SIC 主循环编排与 BIC Δ≥10 接受判据
     if fit_backend not in {"dense", "cached"}:
         raise ValueError("fit_backend must be 'dense' or 'cached'")
     current = multi_harmonic_fit(t, y, [])
@@ -350,9 +362,7 @@ def detect_multitone(
             quick.append((trial["bic"], origin, seeds))
         quick.sort(key=lambda item: item[0])
         refined = []
-        # Quick BIC screening is cheap; only the best seed is refined. A new
-        # well-separated residual peak needs one-dimensional refinement only;
-        # close-pair candidates receive the full joint refinement.
+        # [AI-1] 辅助快速 BIC 预筛：仅最优种子进入精修，节约计算
         for _, origin, seeds in quick[:1]:
             is_wide_residual_peak = origin == "residual_peak" and (
                 len(current["frequencies_hz"]) == 0
