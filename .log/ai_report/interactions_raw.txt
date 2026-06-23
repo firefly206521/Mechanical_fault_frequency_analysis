@@ -1,0 +1,803 @@
+=== TURN 1 ===
+Generate a file named AGENTS.md that serves as a contributor guide for this repository.
+Your goal is to produce a clear, concise, and well-structured document with descriptive headings and actionable explanations for each section.
+Follow the outline below, but adapt as needed — add sections if relevant, and omit those that do not apply to this project.
+
+Document Requirements
+
+- Title the document "Repository Guidelines".
+- Use Markdown headings (#, ##, etc.) for structure.
+- Keep the document concise. 200-400 words is optimal.
+- Keep explanations short, direct, and specific to this repository.
+- Provide examples where helpful (commands, directory paths, naming patterns).
+- Maintain a professional, instructional tone.
+
+Recommended Sections
+
+Project Structure & Module Organization
+
+- Outline the project structure, including where the source code, tests, and assets are located.
+
+Build, Test, and Development Commands
+
+- List key commands for building, testing, and running locally (e.g., npm test, make build).
+- Briefly explain what each command does.
+
+Coding Style & Naming Conventions
+
+- Specify indentation rules, language-specific style preferences, and naming patterns.
+- Include any formatting or linting tools used.
+
+Testing Guidelines
+
+- Identify testing frameworks and coverage requirements.
+- State test naming conventions and how to run tests.
+
+Commit & Pull Request Guidelines
+
+- Summarize commit message conventions found in the project’s Git history.
+- Outline pull request requirements (descriptions, linked issues, screenshots, etc.).
+
+(Optional) Add other sections if relevant, such as Security & Configuration Tips, Architecture Overview, or Agent-Specific Instructions.
+
+=== TURN 2 ===
+你先看一下"E:\AIworkspace\2026CSU-math\testA\A题模型手册.md"和"E:\AIworkspace\2026CSU-math\testA\强噪声下微弱故障信号检测报告.md"，对这个题目的算法实现做一下计划
+
+=== TURN 3 ===
+先不考虑Q234，针对Q1，我希望能对多个模型进行实现，以便比较优劣和选定后续方向
+
+=== TURN 4 ===
+PLEASE IMPLEMENT THIS PLAN:
+# Q1 多模型实现与比较计划
+
+## Summary
+- 只解决 Q1：从 `data.xlsx` 的“单源故障”sheet 中检测微弱周期信号，并估计目标频率 `f0`。
+- 实现多个模型，统一输入、统一输出、统一评价指标，先比较优劣，再决定 Q2/Q3 后续主线。
+- 第一版建议实现 6 个模型：传统 FFT、Welch PSD、匹配滤波/GLRT、CFAR-FFT、SSA 去噪 + FFT、MUSIC。它们覆盖基线、统计判决、去噪增强、高分辨率估计。
+
+## Models
+- `FFT Peak Baseline`
+  - 去均值、去趋势、Hann 窗，直接取频谱最大峰。
+  - 用作传统傅里叶基线，便于说明改进幅度。
+- `Welch PSD`
+  - 分段平均功率谱，降低随机噪声方差。
+  - 对比单次 FFT 的稳定性，但频率分辨率会下降。
+- `CFAR + FFT`
+  - 用滑动中位数估计局部噪声底，对频谱峰做自适应门限。
+  - 输出 `f0_hat`、峰值/局部背景比、是否过门限。
+- `Matched Filter / GLRT`
+  - 在候选频率网格上计算正弦/余弦投影能量。
+  - 用纯噪声 Monte Carlo 估计阈值，控制 `P_FA=0.05`。
+  - 作为 Q1 主推荐候选，因为它和题面正弦模型最一致。
+- `SSA Denoise + FFT`
+  - 构造 Hankel 轨迹矩阵，保留前一对主要奇异分量重构，再做 FFT。
+  - 用于验证去噪增强是否提升弱周期检测。
+- `MUSIC`
+  - 用延迟嵌入协方差矩阵和噪声子空间估计频率。
+  - 作为高分辨率对照，重点看是否比 FFT 网格更精细、是否在低 SNR 下稳定。
+
+## Implementation
+- 新增一个 Q1 专用实验脚本，例如 `q1_model_compare.py`。
+- 数据读取：
+  - 直接读取 `data.xlsx` 的“单源故障”sheet。
+  - 校验 `N=40001`、采样间隔约 `0.01s`、`fs=100Hz`。
+  - 若时间列异常，用样本序号重建时间轴。
+- 统一模型接口：
+  - 每个模型实现为函数，输入 `(t, x, fs, config)`。
+  - 输出统一字典：`model_name, detected, f0_hat, score, threshold, runtime_ms, notes`。
+- 统一精修：
+  - 所有模型给出粗频率后，都用一维非线性最小二乘在邻域内精修 `f0`。
+  - 避免比较时被 FFT 栅格误差主导。
+- 统一报告：
+  - 输出 Markdown/CSV 比较表。
+  - 保存频谱图、检测统计量曲线、模型排序图。
+
+## Evaluation
+- 真实数据比较：
+  - `f0_hat`
+  - 检测统计量强度
+  - 是否通过阈值
+  - 运行时间
+  - 结果稳定性说明
+- 合成数据验证：
+  - 使用题面模型生成 `A sin(2πf0t+phi)+noise`。
+  - 以 `f0=2Hz`，SNR 扫描 `-20dB` 到 `-5dB`。
+  - 每个 SNR 做 Monte Carlo，统计 `频率误差均值/方差`、`P_D`、`P_FA`。
+- 选型标准：
+  - 主模型优先满足：频率误差小、`P_FA` 可控、低 SNR 下 `P_D` 高、解释性强。
+  - 若 GLRT/CFAR 已稳定优于其他模型，后续 Q2 直接接谐波回归恢复波形。
+  - 若 SSA 明显提升低 SNR 检测，则 Q2 可加入 SSA 作为前端去噪。
+  - 若 MUSIC 不稳定或参数敏感，只保留为论文对照，不作为主线。
+
+## Assumptions
+- 第一版不实现 MCKD、CYCBD、包络谱，因为 Q1 题面实际信号是正弦模型，不是冲击调制模型。
+- 本机已有所需依赖：`numpy, pandas, scipy, sklearn, matplotlib, statsmodels, pywt`。
+- 比较目标是为 Q1 选主算法，不提前为 Q2-Q4 做复杂扩展。
+
+=== TURN 5 ===
+那就用GLRT做Q1的模型吧
+
+=== TURN 6 ===
+能画出算法过滤后的微弱信号图吗，或者和原始数据放一起只是标红线
+
+=== TURN 7 ===
+"E:\AIworkspace\2026CSU-math\testA\q1_glrt_results\q1_glrt_statistic.png"和"E:\AIworkspace\2026CSU-math\testA\q1_glrt_results\q1_glrt_recovered_signal_full.png"都明显不对啊，一个Y轴比例太大，看上去就是一条线，一个整个区域全部是红色
+
+=== TURN 8 ===
+误报率5%是高还是低
+
+=== TURN 9 ===
+下一步先把第一问完整收尾，不要急着进入多故障源。
+具体需要完成：
+补充数据预处理与噪声分析。
+固定并记录GLRT的全部参数。
+把400秒数据分成若干段，验证每段都能检测到约2 Hz。
+构造不同信噪比的仿真数据。
+比较FFT峰值法和GLRT的检测成功率、频率误差。
+绘制检测概率 \(P_D\)-SNR 曲线。
+整理第一问所需的公式、流程图、结果表和结论。
+
+=== TURN 10 ===
+修改一下图例，除了专有名词都用中文
+
+=== TURN 11 ===
+拆分一下E:/AIworkspace/2026CSU-math/testA/q1_glrt_model.py，把计算和生成文件和图片部分分开可行吗，全部放一个文件夹里
+
+=== TURN 12 ===
+"E:\AIworkspace\2026CSU-math\testA\q1_glrt\.log\review\code_review.md"审查报告在这里
+
+=== TURN 13 ===
+把一阶段做的事情和这次改动输出日志"E:\AIworkspace\2026CSU-math\testA\q1_glrt\.log\change"
+
+=== TURN 14 ===
+刚刚完成了第二阶段的代码书写，审查在"E:\AIworkspace\2026CSU-math\testA\q2_harmonic_recovery\.log\review\code_review_20260619.json"，你先了解代码，再动手修
+
+=== TURN 15 ===
+"E:\AIworkspace\2026CSU-math\testA\q2_harmonic_recovery\.log\review\code_review_20260619.md"，还有没修好的
+
+=== TURN 16 ===
+outputs.py:91 │ from statistics import NormalDist 内联 import │ ❌ 仍存在（函数体内导入）
+
+=== TURN 17 ===
+你觉得计算量达到什么程度值得把部分计算用CUDA交给GPU跑
+
+=== TURN 18 ===
+我现在要另一个ai在写第三问，他预估运行时间在15-40分钟，这种情况有必要上CUDA吗
+
+=== TURN 19 ===
+你先把第二问做的事情以及完善写到那个目录下的.log里，创建一个change文件夹，输出markdown
+
+=== TURN 20 ===
+现在已经把第三问拉取到本地了，刚刚测试10次又只要43s，但是没有写时间消耗输出的代码。结果和别人交叉验证应该没问题。现在我有几个事情要做：1.审查代码质量。2.测试一次200次看要多久。3.修改代码输出时间并做轻量测试。4.对代码运行逻辑优化以减少时间。你觉得哪几个是需要的，以及什么顺序
+
+=== TURN 21 ===
+代码质量审查有别的ai来做，你把需要审查内容输出后等我给你结果就行了，其他的按你的计划
+
+=== TURN 22 ===
+你把审查内容输出成文件
+
+=== TURN 23 ===
+q3_multisource_separation/.log/review/code_review_20260619.md，你看看这个审查报告是否可以
+
+=== TURN 24 ===
+应该没乱码了，你看看，没问题就修复吧
+
+=== TURN 25 ===
+围绕 13.5 Hz 对称构造是什么意思
+
+=== TURN 26 ===
+那不就偏离真实场景吗
+
+=== TURN 27 ===
+固定中心频率和第三第四问的要求有偏离吗
+
+=== TURN 28 ===
+(3) 多故障源的分离与定位
+在实际工况中，机械设备可能同时存在多处不同位置的故障（例如，多个不
+同齿数的齿轮同时出现破损），导致采集到的信号中包含多个不同频率的微弱周
+
+期信号分量，即：
+
+请基于你在前两问建立的模型，提出一种扩展方案使其能够从单一通道的混合信
+号中自动分离并识别出多个潜在的故障特征频率
+，并估计对应的振
+幅和初相。 
+请设计一个数值实验来验证你的方法，并讨论当两个故障频率非常接近时，
+你的模型的辨识极限。数据见 data.xlsx 的”多源故障”sheet。
+(4) 传感器布局与系统鲁棒性优化
+机械设备故障检测系统的性能不仅取决于算法，还受到传感器安装位置的影
+响。假设你可以在设备的关键部位（如轴承座、齿轮箱壳体）布置最多 3 个加速
+度传感器。考虑到信号传播路径的衰减、不同测点对同一故障源的敏感度差异以
+及噪声的空间分布不均，请建立一个数学模型，为这 3 个传感器设计最优的布局
+方案。
+你的目标是最大化整个检测系统对微弱故障信号的综合检测概率，并最小化
+误报率。方案需要结合前三问的结论，解释你的布局策略为何能提升系统的鲁棒
+性和可靠性，给出在不同信噪比条件下的预期性能增益，并设计实验进行仿真验
+证。
+
+=== TURN 29 ===
+那为什么不直接修掉这个问题
+
+=== TURN 30 ===
+现在的每一次测试都是随机生成数据然后测试吗，还是怎么测试
+
+=== TURN 31 ===
+你现在做了性能优化吗
+
+=== TURN 32 ===
+需不需要先跑一次中等测试，采集一些数据，再做优化
+
+=== TURN 33 ===
+你如果觉得现在的各项输出都已经准备好了就开始跑吧
+
+=== TURN 34 ===
+那你先提交一次，然后做优化
+
+=== TURN 35 ===
+这种题的测试存在极端情况的概念吗
+
+=== TURN 36 ===
+那现在的测试包含极端情况吗
+
+=== TURN 37 ===
+那你补全所有极端情况，然后跑一次大型测试作为此阶段的最终检验如何
+
+=== TURN 38 ===
+你现在输出这次的修改日志，以及对提高非对称近频成功率的建议
+
+=== TURN 39 ===
+上一阶段的改动在这里，你看看，思考一下第三问还要做些什么
+
+=== TURN 40 ===
+所以你认为当前数据已经足够说明这个算法在局部足够优秀了，只要补充对应材料了
+
+=== TURN 41 ===
+那你认为计算速度还有没有进一步优化的空间
+
+=== TURN 42 ===
+那这样，你先完成这阶段扫尾工作，把收尾文档初步写好，q3那么多测试文档该删的删，让工作区文件夹干净一点
+
+=== TURN 43 ===
+PLEASE IMPLEMENT THIS PLAN:
+# Q3 阶段收尾与工作区清理计划
+
+## Summary
+
+按“归档旧结果 + 输出两类收尾文档”的方式收尾第三问。保留优化版正式结果和优化前基线，归档中间/旧测试目录，新增论文材料文档和工程收尾日志。核心算法不再改动，除非整理文档时发现结果口径不一致。
+
+## Key Changes
+
+- 新建归档目录：`E:\AIworkspace\2026CSU-math\testA\q3_archived_results_20260619`。
+- 移入旧中间结果目录：
+  - `q3_multisource_separation_results`
+  - `q3_multisource_separation_results_mid`
+  - `q3_multisource_separation_results_mid_parallel`
+  - `q3_multisource_separation_results_final`
+- 保留在工作区根部：
+  - `q3_multisource_separation`：源码、README、日志。
+  - `q3_multisource_separation_results_optimized`：第三问当前权威结果。
+  - `q3_multisource_separation_results_review_fixed_large`：优化前正式基线，用于对比说明。
+- 删除非必要缓存：
+  - `q3_multisource_separation/__pycache__`
+  - 仅删除缓存目录，不碰源码、日志、CSV、PNG、报告。
+
+## Documents To Produce
+
+- 论文材料文档：
+  - 路径：`E:\AIworkspace\2026CSU-math\testA\q3_multisource_separation\.log\change\q3_paper_materials_20260619.md`
+  - 内容：第三问模型假设、公式、GLRT 多峰扩展、BIC 自动定阶、多频联合回归、近频处理流程、真实数据结果表、SNR 仿真表、近频辨识极限、极端工况边界、结论段。
+  - 口径：以 `q3_multisource_separation_results_optimized` 为准。
+- 工程收尾日志：
+  - 路径：`E:\AIworkspace\2026CSU-math\testA\q3_multisource_separation\.log\change\q3_stage_closeout_20260619.md`
+  - 内容：保留/归档目录说明、核心命令、最终指标、与基线对比、已知限制、后续是否需要补跑的建议。
+- 可选更新 README：
+  - 只更新结果目录口径，明确 `q3_multisource_separation_results_optimized` 是当前正式结果。
+  - 不改算法描述和参数，避免引入新的验证负担。
+
+## Validation
+
+- 清理后检查：
+  - 工作区根部只剩源码目录、优化结果目录、优化前基线目录和归档目录。
+  - `q3_multisource_separation_results_optimized/q3_report.md`、`q3_runtime.txt`、`q3_resolution_limit.csv`、`q3_extreme_summary.csv` 仍存在。
+  - `q3_multisource_separation_results_review_fixed_large/q3_runtime.txt` 和关键对比文件仍存在。
+- 文档口径检查：
+  - 真实数据四个频率写为约 `4, 8, 13, 14 Hz`。
+  - 近频结论写为等幅经验极限约 `0.002 Hz`，不等幅经验极限约 `0.003 Hz`。
+  - 误报率写为约 `0.2%`。
+  - Hessian 区间只写作局部不确定性诊断，不称为严格 `95%` 置信区间。
+  - 完全同频和相消写作单通道不可辨识边界，不写成算法可分离。
+
+## Assumptions
+
+- 本阶段不再运行大型实验。
+- 不删除任何正式结果，只归档旧结果目录。
+- 不提交大型生成结果目录，除非后续明确要求。
+- 第三问当前算法和结果已经足够支撑论文主线，后续重点是表述、追溯和工作区整洁。
+
+=== TURN 44 ===
+"E:\AIworkspace\2026CSU-math\testA\q3_multisource_separation\.log\review\code_review_20260619.md"这里有几个建议，你看看是不是可以参考一下
+
+=== TURN 45 ===
+那你就做这两个动作扫尾吧
+
+=== TURN 46 ===
+你想一下第四问怎么做，在已有的基础上怎么改进(4) 传感器布局与系统鲁棒性优化 
+机械设备故障检测系统的性能不仅取决于算法，还受到传感器安装位置的影
+响。假设你可以在设备的关键部位（如轴承座、齿轮箱壳体）布置最多 3 个加速
+度传感器。考虑到信号传播路径的衰减、不同测点对同一故障源的敏感度差异以
+及噪声的空间分布不均，请建立一个数学模型，为这 3 个传感器设计最优的布局
+方案。
+你的目标是最大化整个检测系统对微弱故障信号的综合检测概率，并最小化
+误报率。方案需要结合前三问的结论，解释你的布局策略为何能提升系统的鲁棒
+性和可靠性，给出在不同信噪比条件下的预期性能增益，并设计实验进行仿真验
+证。
+
+=== TURN 47 ===
+这个布局在没有具体模型的情况下怎么考虑？
+
+=== TURN 48 ===
+那你就开始吧
+
+=== TURN 49 ===
+PLEASE IMPLEMENT THIS PLAN:
+# Q4 传感器布局与鲁棒性优化实施计划
+
+## Summary
+
+第四问新增一个独立模块 `q4_sensor_layout/`，不改 Q1-Q3 的核心算法。它把前三问的检测与分离能力包装成“多传感器融合检测器”，再用候选测点枚举和 Monte Carlo 仿真选择最多 3 个传感器布局。由于题目没有给真实几何结构，布局优化采用“候选测点 + 敏感度矩阵 + 噪声场景集”的鲁棒建模方式。
+
+## Key Changes
+
+- 建立多传感器观测模型：
+  \[
+  y_m(t)=\sum_k h_{mk}A_k\sin(2\pi f_kt+\phi_k+\delta_{mk})+n_m(t)
+  \]
+  其中 `h_mk` 表示测点对故障源的综合敏感度，`delta_mk` 表示传播相位差，`n_m(t)` 表示测点噪声。
+- 设定有限候选测点，不做连续空间优化：
+  `bearing_left`, `bearing_right`, `gearbox_left`, `gearbox_right`, `input_shaft`, `output_shaft`。
+- 枚举所有 1、2、3 传感器组合，计算每个布局的：
+  - 综合检测概率 `P_D`
+  - 经验误报率 `P_FA`
+  - 各故障源检测概率均衡性
+  - 低 SNR 鲁棒性评分
+- 融合规则采用加权 GLRT：
+  \[
+  T_{\text{fused}}(f)=\sum_{m\in S}w_mT_m(f),\quad w_m\propto 1/\hat\sigma_m^2
+  \]
+  噪声越小的测点权重越高。
+- 最优布局目标函数：
+  \[
+  J(S)=\overline{P_D(S)}-\lambda P_{FA}(S)-\mu\operatorname{Var}_k(P_{D,k}(S))
+  \]
+  默认 `lambda=2.0`，`mu=0.5`，优先避免误报和单一故障源偏科。
+
+## Implementation Changes
+
+- 新建 `q4_sensor_layout/`：
+  - `core.py`：传感器场景、信号生成、融合统计量、布局评分。
+  - `experiments.py`：SNR 扫描、布局枚举、鲁棒性实验。
+  - `outputs.py`：CSV、PNG、Markdown 报告输出。
+  - `run_q4.py`：命令行入口。
+- 新建结果目录 `q4_sensor_layout_results/`，输出：
+  - `q4_layout_ranking.csv`
+  - `q4_snr_performance.csv`
+  - `q4_fault_coverage.csv`
+  - `q4_noise_robustness.csv`
+  - `q4_report.md`
+  - `q4_pd_snr_curve.png`
+  - `q4_layout_ranking.png`
+  - `q4_sensitivity_heatmap.png`
+- 仿真频率沿用 Q3 正式结果：约 `4, 8, 13, 14 Hz`。
+- 对照组包括：
+  - 单个最优传感器
+  - 随机 3 传感器布局
+  - 最优 3 传感器布局
+  - 全部候选测点上限性能
+
+## Test Plan
+
+- 轻量验证：
+  - 编译检查：`python -m compileall q4_sensor_layout`
+  - 小规模运行：每个 SNR 20 次 Monte Carlo，确认文件输出完整。
+- 正式实验：
+  - SNR 扫描：`-25, -20, -15, -12, -10, -5 dB`
+  - 每个 SNR 默认 200 次 Monte Carlo。
+  - 纯噪声误报实验默认 500 次。
+- 验证场景：
+  - 均匀噪声。
+  - 噪声空间不均。
+  - 单测点弱敏感。
+  - 单测点高噪声。
+  - 近频故障。
+  - 相位抵消。
+- 成功标准：
+  - 最优 3 传感器布局在低 SNR 下 `P_D` 高于单传感器和随机布局。
+  - 融合后 `P_FA` 不明显升高。
+  - 不同故障源的检测概率更均衡。
+  - 报告能明确说明：没有具体机械几何时，结果是候选测点集合下的鲁棒最优，而不是物理全局最优坐标。
+
+## Assumptions
+
+- 本阶段不修改 Q1-Q3 算法，只复用其思想和正式结果口径。
+- 题目没有具体结构尺寸，因此不建立有限元或真实传播路径模型。
+- 候选测点和敏感度矩阵用于数学建模仿真，论文中必须说明其抽象含义。
+- 默认先完成轻量实验和报告框架；如果运行时间可接受，再跑正式 200 次 Monte Carlo。
+
+=== TURN 50 ===
+这样，我发现输出结构有点问题，应该把论文所用数据和图以及其他的原始数据分开，在两个子文件夹下，在进一步优化前先把q4的这个做一下
+
+=== TURN 51 ===
+你认为下一步应该做什么
+
+=== TURN 52 ===
+现在是这样的，今天快结束了，第四问的代码估计想打磨完美是做不完了，但是我希望你可以把进度推进到一个可以做海量测试的阶段，这样今晚两台电脑可以跑7个小时以上的测试，我希望你尽可能把还需要验证的、各种角度的、甚至是实验性的测试都准备好，这样明天可以拿到很多数据
+
+=== TURN 53 ===
+所以相同的代码库在这个工作区跑不同命令就行了对吗，预计运行时间多少
+
+=== TURN 54 ===
+很好，你现在做最后一件事：回顾今天所有的工作，查看日志和适当查看diff，提出你认为可以固化成skill的东西
+
+=== TURN 55 ===
+我觉得还是直接拆开，现在不拆就不知道啥时候拆去了，三不应该是可写论文，而是面向论文的输出优化，毕竟这和真正的论文还是有区别的。然后我觉得CPU并行的优化也可以写成skill。然后我想有一个skill或什么的在一开始的模型比较后和每一大轮测试结束后可以把试过的模型统一存储，更新优缺点和使用时的坑，这样以后挑选模型就等于有了经验
+
+=== TURN 56 ===
+触发词有大问题，1.工作区干净一点肯定不是这个skill触发，而且这个skill应该是一开始输出的时候就触发，而不是后期返工。2.CUDA根本就不是CPU。你还要认真思考一下
+
+=== TURN 57 ===
+PLEASE IMPLEMENT THIS PLAN:
+# Skill 拆分修正版
+
+## Summary
+
+拆成 5 个主 skill，边界重新收紧。核心原则：触发词不是随便扩大覆盖面，而是只在对应工作真正开始前触发。`paper-output-optimizer` 是输出设计 skill，不是清理 skill；`cpu-parallel-optimization` 只管 CPU，不讨论 CUDA 实现。
+
+## Skills
+
+### 1. `model-experience-registry`
+
+用途：沉淀模型比较和大轮测试后的经验库。
+
+正确触发：
+- 完成一轮模型比较后。
+- 完成一轮大规模测试后。
+- 用户问“之前哪些模型试过”“后续选哪个模型”“这个模型有什么坑”。
+- 新模型被加入、淘汰或作为论文对照保留时。
+
+不触发：
+- 单纯写代码。
+- 单纯整理论文输出。
+- 单纯跑测试但不需要更新模型经验。
+
+内容：
+- 项目内维护 `.log/model_registry/`。
+- 每个模型一张 model card：适用条件、参数、优点、缺点、失败场景、运行成本、相关结果、下一轮建议。
+- 每一轮测试生成 round summary，并更新模型索引。
+
+### 2. `paper-output-optimizer`
+
+用途：在实验输出设计阶段，提前规划“论文可用产物”和“原始追溯数据”。
+
+正确触发：
+- 准备实现一个会生成报告、CSV、PNG、Markdown 的实验模块时。
+- 用户说“这些图表后面要放论文”“论文所用数据和图要分开”“输出结构怎么设计”。
+- 新建结果目录、输出报告、输出图表之前。
+
+不触发：
+- 用户只是说“工作区干净一点”。
+- 用户只是要求删除缓存、归档旧结果。
+- 用户只是审查代码质量。
+
+内容：
+- 输出目录默认分为：
+  - `paper/`：论文可引用报告、汇总表、图片。
+  - `raw/`：trial 明细、完整枚举、运行参数、日志。
+  - `README.md`：说明目录口径。
+- 在代码生成输出时就写入这个结构，避免后期返工。
+- 检查图表是否适合论文展示：中文标签、尺度正常、不过密、不误导。
+- 注意它不是“写论文 skill”，只是“面向论文的输出优化 skill”。
+
+### 3. `monte-carlo-validation-runner`
+
+用途：准备可长时间运行、可分机、可追溯的仿真实验。
+
+正确触发：
+- 用户说“海量测试”“今晚跑”“两台电脑跑”“长时间 Monte Carlo”“SNR 扫描”“误报率验证”。
+- 实验预计超过几十分钟。
+- 需要多 seed、多 profile、多输出目录、第二天汇总。
+
+不触发：
+- 几秒钟的普通单元测试。
+- 只需要跑一次脚本看能不能通。
+- 还没确定实验指标时。
+
+内容：
+- 必须先有 smoke profile。
+- 长跑支持 `--runs`、`--seed`、`--output-dir`、`--snr-levels`。
+- profile 包含 baseline、repeat_seed、low_snr_dense、strict_false_alarm、stress、experimental。
+- 每个 job 记录命令、起止时间、return code。
+- 提供汇总脚本，统一提取 top layouts、关键曲线和运行参数。
+
+### 4. `cpu-parallel-optimization`
+
+用途：优化 CPU 上的大量独立计算任务。
+
+正确触发：
+- 用户问“CPU 并行”“多进程”“跑 200 次太慢”“能不能优化运行时间”。
+- 任务是 Monte Carlo trial、网格扫描、重复仿真、批量拟合。
+- 当前瓶颈可能来自重复计算、Python 循环、I/O 或 CPU 多核未利用。
+
+不触发：
+- 用户明确问 CUDA/GPU。
+- 模型本身还没验证正确。
+- 单次运行已经很短，不值得优化。
+
+内容：
+- 先测基线耗时，再改。
+- 优化顺序：
+  1. 减少重复读取和重复阈值校准。
+  2. 缓存基函数、阈值、数据。
+  3. 向量化热点。
+  4. 多进程并行独立 trial。
+  5. 主进程统一写 CSV，worker 不写共享文件。
+- 输出 timing report：workers、阶段耗时、总墙钟、单 trial 均值。
+- 不讨论 CUDA，不给 GPU 建议。
+
+### 5. `math-modeling-stage-workflow`
+
+用途：数学建模题的逐问推进总控流程。
+
+正确触发：
+- 用户给出完整建模题，要求分问推进。
+- 用户说“先做第一问”“下一问怎么接”“把这一问收尾”。
+- 需要把模型、代码、仿真、结果和论文材料串起来。
+
+不触发：
+- 只问某个算法概念。
+- 只要求跑一个现成脚本。
+- 只做输出目录调整。
+
+内容：
+- 每问流程：读题和数据确认 -> 候选模型比较 -> 主模型固定 -> 仿真验证 -> 审查修复 -> 阶段收尾。
+- 推荐模块结构：`core.py`、`experiments.py`、`outputs.py`、`run_*.py`。
+- 每问必须记录：模型假设、参数、随机种子、运行命令、关键结果、适用边界。
+- 明确“不要提前把后续问复杂度塞进当前问”。
+
+## Optional Future Skill
+
+### `compute-acceleration-decision`
+
+这个可以以后单独做，不和 CPU skill 混。
+
+触发：
+- 用户明确问“要不要 CUDA/GPU”“这个计算适合上 GPU 吗”。
+
+内容：
+- 判断 GPU 是否值得：矩阵规模、数据搬运成本、批量并行粒度、现有库支持、开发成本。
+- 输出结论：CPU 足够、CPU 并行优先、GPU 值得尝试、GPU 不值得。
+- 不负责具体 CPU 多进程实现。
+
+## Implementation Order
+
+1. `paper-output-optimizer`：先固化输出结构，避免以后每次后期返工。
+2. `model-experience-registry`：马上承接今天 Q1-Q4 的模型经验。
+3. `monte-carlo-validation-runner`：固化今晚 Q4 长跑机制。
+4. `cpu-parallel-optimization`：固化 Q3/Q4 的 CPU 性能优化经验。
+5. `math-modeling-stage-workflow`：最后做总控，引用前面几个 skill 的边界。
+
+## Assumptions
+
+- 这些 skill 都放在用户级 `C:\Users\Firefly\.codex\skills`。
+- 不把本题具体数据写进 skill，只把流程、模板和检查项固化。
+- 如果后续要讨论 CUDA，单独做 `compute-acceleration-decision`，不污染 CPU 并行 skill。
+
+=== TURN 58 ===
+海量测试跑完了，"E:\AIworkspace\2026CSU-math\testA\q4_sensor_layout_results_overnight"，你看看
+
+=== TURN 59 ===
+"E:\AIworkspace\2026CSU-math\testA\q4_sensor_layout\.log\suggestion\q4_universal_sensor_placement_plan.md"，对你的方案提了一点建议，你看看要不要采纳
+
+=== TURN 60 ===
+这样，你先把V0扫尾，扫尾后告诉我，我推送一次，然后你再做计划，开一条新分支来做V1
+
+=== TURN 61 ===
+你先把V0的质量问题修一下，"E:\AIworkspace\2026CSU-math\testA\q4_sensor_layout\.log\review\q4_code_review_20260620.md"
+
+=== TURN 62 ===
+现在做一下v1的计划吧
+
+=== TURN 63 ===
+每个输出模块都标注v1，实施吧
+
+=== TURN 64 ===
+PLEASE IMPLEMENT THIS PLAN:
+# Q4 V1 自适应传感器布局实施计划
+
+## Summary
+
+在新分支 `codex/q4-v1-adaptive-sensor-layout` 上新增独立 V1 模块，不覆盖 Q4 V0。V1 输出的目录、报告、CSV、图片、运行日志、README、命令入口都显式标注 `v1`，避免和 V0 结果混淆。
+
+## Key Changes
+
+- 新建模块：`q4_adaptive_sensor_layout/`。
+- 新建结果目录：`q4_sensor_layout_v1_results/`。
+- 所有输出文件统一带 `v1`：
+  - `paper/q4_v1_adaptive_report.md`
+  - `paper/q4_v1_selected_regions.csv`
+  - `paper/q4_v1_mesh_convergence.csv`
+  - `paper/q4_v1_robust_detection.csv`
+  - `paper/q4_v1_pd_snr_curve.png`
+  - `paper/q4_v1_layout_heatmap.png`
+  - `raw/q4_v1_candidate_points.csv`
+  - `raw/q4_v1_prescreen_scores.csv`
+  - `raw/q4_v1_layout_trials.csv`
+  - `raw/q4_v1_runtime.txt`
+- 顶层 `README.md` 明确写：
+  - 当前目录是 Q4 V1。
+  - V0 权威结果仍在 `q4_sensor_layout_results_overnight/`。
+  - V1 是参数化结构示例下的自适应布局优化，不是真实设备坐标解。
+
+## Implementation
+
+- 建立 V1 参数化传播模型：
+  - 生成无量纲可安装表面网格。
+  - 每个候选点包含区域标签、坐标、安装方向、噪声水平、复响应向量。
+  - 频率沿用 Q3/Q4：约 `4, 8, 13, 14 Hz`。
+- 解析筛选：
+  - 用白化响应非中心参数评价每个候选点。
+  - 剔除低响应、高噪声、安装不可行、响应高度冗余点。
+  - 保留 20-40 个代表点。
+- 布局搜索：
+  - 先 greedy 选择 3 点。
+  - 再执行 one-swap 局部搜索。
+  - 小规模 smoke 中用完整枚举验证 greedy + swap 误差。
+- Monte Carlo 验证：
+  - 只对 top 5-10 个布局运行时域 GLRT 仿真。
+  - 对照 V0 区域基线、随机三点、最大响应三点、等间距三点。
+- CLI：
+  - `python -m q4_adaptive_sensor_layout.run_q4_v1`
+  - 支持 `--output-dir`、`--profile`、`--seed`、`--grid-size`、`--top-layouts`、`--runs`、`--false-alarm-runs`、`--snr-levels`。
+
+## Test Plan
+
+- 编译检查：
+  - `python -m compileall q4_adaptive_sensor_layout`
+- smoke：
+  - `--profile smoke`
+  - 网格 30-40 点，少量 Monte Carlo。
+  - 验证所有 `q4_v1_*` 文件完整生成。
+- 正确性：
+  - 小网格完整枚举三点组合，对比 greedy + swap，目标值差距不超过 `1%`。
+  - 固定 seed 后重复运行结果一致。
+- medium：
+  - 网格 80-120 点。
+  - SNR：`-25, -20, -15, -12, -10, -5 dB`。
+  - 验证 V1 在低 SNR 下优于随机/最大响应基线，误报率不明显高于阈值。
+- 输出检查：
+  - `paper/` 只放论文可用汇总和图。
+  - `raw/` 放完整候选点、筛选分数、trial 明细和运行参数。
+  - 图表标题、报告段落、文件名均标注 V1。
+
+## Assumptions
+
+- V1 不改 Q1-Q3，也不改 Q4 V0。
+- V1 只新增代码和结果目录。
+- V1 结论写成“参数化结构示例下的稳定区域”，不写成真实机械坐标。
+- V0 仍作为当前已验证基线，V1 结果需要重新 smoke/medium 验证后再决定是否进入论文主线。
+
+=== TURN 65 ===
+你看一下q4_adaptive_sensor_layout\.log\review\code_review_20260620.md
+
+=== TURN 66 ===
+要不跑一次测试再判断是否还要优化？还是你觉得下一步做什么
+
+=== TURN 67 ===
+你先跑一次测试吧，预估时间10分钟左右
+
+=== TURN 68 ===
+审查在这里q4_adaptive_sensor_layout\.log\review\code_review_round2_20260620.md
+
+=== TURN 69 ===
+这个正式实验时间这么长，有没有什么优化的办法
+
+=== TURN 70 ===
+什么时候应该上CUDA？现在跑一次要2个小时，我需要一个合理的不使用GPU的理由，而不是一句模糊的不划算
+
+=== TURN 71 ===
+那你在新分支上做优化吧，但是这只是实验性质的，master分支在再次有长跑需求前不允许改动了，也不允许擅自开启大规模长时间测试
+
+=== TURN 72 ===
+PLEASE IMPLEMENT THIS PLAN:
+# Q3 实验 D CPU 优化分支计划
+
+## Summary
+
+在新分支 `codex/q3-experiment-d-cpu-optimization` 上做实验性质优化。`master` 不再改动；不擅自启动正式 200 runs 或其他长时间测试。优化目标是保持实验 D 的正式科学口径不变，只改善后续复跑效率和可观测性。
+
+## Key Changes
+
+- 分支与保护：
+  - 从当前 `master` 工作区状态创建 `codex/q3-experiment-d-cpu-optimization`。
+  - 当前已有的 3 个默认输出目录改动随分支带走，不回滚、不在 `master` 继续编辑。
+  - 后续所有代码改动、smoke 输出和 timing 文档只发生在该实验分支。
+
+- 实验 D runner 优化：
+  - 给 `run_q3_experiment_d.py` 增加 `--chunksize`，用于降低 `ProcessPoolExecutor.map` 调度开销。
+  - 增加 `--timing-detail`，输出 trial 级耗时摘要到 `raw/q3_experiment_d_timing_summary.csv/json`。
+  - 保留现有 resume 逻辑，仍由主进程统一写 CSV，worker 不写共享文件。
+  - 不改变默认 `detector=complete`、网格、成功判据、BIC 参数和报告口径。
+
+- 低风险数值热点优化：
+  - 在 `q3_multisource_separation/core.py` 内增加可选缓存/复用路径，用于减少频率精修中重复构造 `40001 x p` 设计矩阵。
+  - 保留原始 dense 路径，并提供 `--fit-backend dense|cached`；初始默认仍为 `dense`。
+  - 验证 cached 与 dense 在小网格上结果一致后，再把实验分支默认切到 `cached`。
+
+- 输出与日志：
+  - 新增实验日志 `q3_multisource_separation/.log/change/q3_experiment_d_cpu_optimization_20260620.md`。
+  - 记录基线耗时、优化点、smoke 命令、correctness 对比、未启动长跑的说明。
+
+## Test Plan
+
+- 允许运行的短测试：
+  - `python -m compileall q3_multisource_separation`
+  - `python -m q3_multisource_separation.run_q3_experiment_d --profile smoke --runs 1 --workers 1 --output-dir q3_experiment_results/d_opt_smoke_dense --fit-backend dense --timing-detail`
+  - `python -m q3_multisource_separation.run_q3_experiment_d --profile smoke --runs 1 --workers 1 --output-dir q3_experiment_results/d_opt_smoke_cached --fit-backend cached --timing-detail`
+  - 一个小型 workers/chunksize 对比，限制在几分钟内。
+
+- 正确性验收：
+  - dense 与 cached 的 `success`、`estimated_k`、`ill_conditioned` 必须一致。
+  - `estimated_frequencies_hz` 差异目标 `<= 1e-8 Hz`；若达不到，cached 保留为实验选项，不切默认。
+  - summary CSV 的 90% 边界在 smoke/小样本中保持一致。
+
+- 禁止事项：
+  - 不运行 `--profile official --runs 200`。
+  - 不启动超过约 10 分钟的测试。
+  - 不覆盖现有正式结果 `q3_experiment_results/d/`。
+
+## Assumptions
+
+- 这次只优化 Q3 实验 D 的后续复跑效率，不重新生产论文正式数据。
+- CUDA 不进入本轮实现；理由是当前瓶颈是大量小规模、分支化 CPU 拟合任务。
+- 如果后续确实需要长跑，由用户明确指定命令、运行时长和输出目录后再执行。
+
+=== TURN 73 ===
+你现在跑一个5分钟左右的测试正式确定收益
+
+=== TURN 74 ===
+那你先更新skill吧，这轮cpu优化可以优化一下cpu-parallel-optimization吧
+
+=== TURN 75 ===
+没有技术上的新东西要记录吗，怎么只有流程优化
+
+=== TURN 76 ===
+"E:\AIworkspace\2026CSU-math\testA\AI_USAGE_GUIDE.md"你看看怎么样
+
+=== TURN 77 ===
+你修缮一下，数字先改成模糊一点的
+
+=== TURN 78 ===
+"E:\AIworkspace\2026CSU-math\testA\q2_harmonic_recovery_results\q2_spectrum_comparison.png"看到这个图了吗，我希望以后生图都是图例不要放绘图区，以免被图像遮挡，给我总结生图的核心代码和技巧写成skill
+
+=== TURN 79 ===
+你看一下E:\AIworkspace\2026CSU-math\testA\q4_sensor_layout_v1_results_robustness_v2_medium\paper里的四张图片，似乎后两张是需要的但是生成有问题，而且图例也不是中文
+
+=== TURN 80 ===
+现在需要一张各问题关系图和几张核心算法模型的流程图
+
+=== TURN 81 ===
+# Files mentioned by the user:
+
+## codex-clipboard-f511ee4c-5f93-498e-a519-ae5951d205a7.png: C:/Users/Firefly/AppData/Local/Temp/codex-clipboard-f511ee4c-5f93-498e-a519-ae5951d205a7.png
+
+## My request for Codex:
+这种才是流程图
+
+=== TURN 82 ===
+现在总结今天的事情，看有没有需要沉淀成skill或者现有skill需要更新的
+
+=== TURN 83 ===
+新增全部驳回，目前看来效果不佳。我认为在数学建模流程里要清晰的写明每一问要把文件夹结构做清楚，每次优化后前一次的数据该删的删该归档的归档，最终工作区留下的权威文件必须只有一份
+
+=== TURN 84 ===
+monte-carlo-validation-runner、cpu-parallel-optimization、figure-output-polish的更新也要推进
+
