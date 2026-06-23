@@ -599,6 +599,8 @@ T_{\text{fused}}(f_k) = \sum_{m\in S} w_m T_m(f_k), \quad w_m = \frac{1/\hat{\si
 \end{equation}
 单点统计量已经按噪声方差归一化，因此第二次加权属于V1的工程启发式设计，不是严格联合GLRT。程序对每个布局在相同权重和噪声相关模型下重新执行300次纯噪声门限校准，以避免直接套用单点统计量分布。本文只报告该V1策略的经验性能，不声称它是所有融合权重中的理论最优解。
 
+\subsection{布局评分函数与优化}
+
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.92\textwidth]{q4_sensor_layout_algorithm_flow}
@@ -607,8 +609,6 @@ T_{\text{fused}}(f_k) = \sum_{m\in S} w_m T_m(f_k), \quad w_m = \frac{1/\hat{\si
     {\small [AI-1] 优化 matplotlib 配色与标注，人工最终定稿}
 \end{figure}
 \FloatBarrier
-
-\subsection{布局评分函数与优化}
 V1分两阶段评分。解析筛选阶段令$\tilde h_{mk}=h_{mk}/\sigma_m$，先计算噪声加权非中心参数$\lambda_k(S)$、信息矩阵$\boldsymbol G_S=\tilde{\boldsymbol H}_S^H\tilde{\boldsymbol H}_S$和响应冗余度$R(S)$。解析目标为
 \begin{equation}
 J_{\rm ana}(S)=\lambda_{\min}^{\rm robust}
@@ -631,8 +631,10 @@ J_{\rm MC}(S)=0.45\bar P_D+0.35P_D^{\rm low}
 \subsection{布局优化结果}
 Monte Carlo验证排名见表\ref{tab:q4_ranking}。解析目标排名第5的布局\texttt{p105+p074+p062}在随机扰动下取得最高验证评分，说明只按标称响应排序不足以替代随机验证。
 
-\begin{longtable}{ccccc}
-    \caption{Q4 V1布局Monte Carlo验证排名（前六名）}\label{tab:q4_ranking}\\
+\begin{table}[!htbp]
+\centering
+\caption{Q4 V1布局Monte Carlo验证排名（前六名）}\label{tab:q4_ranking}
+\begin{tabular}{ccccc}
     \toprule
     排名 & 布局 & 区域 & 平均分量$P_D$ & $J_{\rm MC}$ \\
     \midrule
@@ -643,7 +645,9 @@ Monte Carlo验证排名见表\ref{tab:q4_ranking}。解析目标排名第5的布
     5 & p105+p074+p098 & 右齿轮箱+左齿轮箱+左齿轮箱 & 58.92\% & 0.4926 \\
     6 & p074+p021+p098 & 左齿轮箱+右齿轮箱+左齿轮箱 & 58.12\% & 0.4871 \\
     \bottomrule
-\end{longtable}
+\end{tabular}
+\end{table}
+\FloatBarrier
 
 \texttt{p105}位于右齿轮箱区，\texttt{p074}和\texttt{p062}位于左齿轮箱区。表\ref{tab:q4_points}给出其无量纲坐标和噪声倍率。
 
